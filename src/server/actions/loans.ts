@@ -110,7 +110,7 @@ export async function applyLoanAction(_prev: any, formData: FormData): Promise<A
       category: 'loan',
       priority: 'high',
       channels: ['in_system', 'sms'],
-      link: `/loans/${result.application.id}`,
+      link: `/loans/applications/${result.application.id}`,
       referenceType: 'loan_application',
       referenceId: result.application.id,
     });

@@ -56,6 +56,7 @@ export function TextInput({
   type = 'text',
   placeholder,
   defaultValue,
+  value,
   required,
   min,
   max,
@@ -72,6 +73,7 @@ export function TextInput({
   type?: string;
   placeholder?: string;
   defaultValue?: string | number | null;
+  value?: string | number | null;
   required?: boolean;
   min?: string | number;
   max?: string | number;
@@ -84,13 +86,14 @@ export function TextInput({
   id?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const controlled = value !== undefined && value !== null;
   return (
     <input
       id={id}
       name={name}
       type={type}
       placeholder={placeholder}
-      defaultValue={defaultValue ?? undefined}
+      {...(controlled ? { value: String(value) } : { defaultValue: defaultValue ?? undefined })}
       required={required}
       min={min}
       max={max}
@@ -109,6 +112,7 @@ export function TextArea({
   name,
   placeholder,
   defaultValue,
+  value,
   rows = 3,
   required,
   className,
@@ -117,16 +121,18 @@ export function TextArea({
   name: string;
   placeholder?: string;
   defaultValue?: string | null;
+  value?: string | null;
   rows?: number;
   required?: boolean;
   className?: string;
   onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
 }) {
+  const controlled = value !== undefined && value !== null;
   return (
     <textarea
       name={name}
       placeholder={placeholder}
-      defaultValue={defaultValue ?? undefined}
+      {...(controlled ? { value } : { defaultValue: defaultValue ?? undefined })}
       rows={rows}
       required={required}
       onChange={onChange}
@@ -139,6 +145,7 @@ export function Select({
   name,
   options,
   defaultValue,
+  value,
   placeholder = 'Select…',
   required,
   className,
@@ -148,14 +155,23 @@ export function Select({
   name: string;
   options: { value: string | number | null; label: string }[];
   defaultValue?: string | number | null;
+  value?: string | number | null;
   placeholder?: string;
   required?: boolean;
   className?: string;
   disabled?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
+  const controlled = value !== undefined && value !== null;
   return (
-    <select name={name} defaultValue={defaultValue ?? ''} required={required} disabled={disabled} onChange={onChange} className={cn('select', className)}>
+    <select
+      name={name}
+      {...(controlled ? { value: String(value ?? '') } : { defaultValue: defaultValue ?? '' })}
+      required={required}
+      disabled={disabled}
+      onChange={onChange}
+      className={cn('select', className)}
+    >
       <option value="">{placeholder}</option>
       {options.map((o) => (
         <option key={String(o.value)} value={String(o.value ?? '')}>

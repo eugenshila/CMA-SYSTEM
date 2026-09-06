@@ -532,7 +532,7 @@ export async function respondToGuarantee(opts: {
     title: opts.accept ? 'Guarantee accepted' : 'Guarantee declined',
     body: `${opts.actor.name} has ${opts.accept ? 'accepted' : 'declined'} to guarantee your loan application ${app?.application_no || ''}.`,
     category: 'loan',
-    link: `/loans/${app?.id ?? ''}`,
+    link: `/loans/applications/${app?.id ?? ''}`,
     referenceType: 'loan_application',
     referenceId: row.loan_application_id,
   });
@@ -638,7 +638,7 @@ export async function updateApplicationStatus(opts: {
     }${opts.notes ? ` Remarks: ${opts.notes}` : ''}`,
     category: 'loan',
     priority: ['approved', 'rejected'].includes(opts.status) ? 'high' : 'normal',
-    link: `/loans/${app.id}`,
+    link: `/loans/applications/${app.id}`,
     channels: ['in_system', 'sms'],
     referenceType: 'loan_application',
     referenceId: app.id,
