@@ -1,7 +1,7 @@
 import 'server-only';
 import { one, query } from '@/lib/db';
 import type { SessionUser } from '@/lib/auth';
-import { can } from '@/lib/rbac';
+import { can, isMember } from '@/lib/rbac';
 import type { ExportSheet } from '@/lib/exports';
 import {
   memberList,
@@ -56,7 +56,10 @@ const EXPORT_PERMISSIONS: Record<string, string> = {
 export function canExport(user: SessionUser, report: string): boolean {
   const required = EXPORT_PERMISSIONS[report];
   if (!required) return false;
-  if (report === 'statement' && user.member_id) return true; // members can export their own statement
+  // Members are self-service: they may export ONLY their own statement, never a
+  // full dataset (member list, loan book, payments, etc.) — even though they hold
+  // the corresponding *.view permission for their self-service screens.
+  if (isMember(user)) return report === 'statement' && Boolean(user.member_id);
   return can(user, required);
 }
 
