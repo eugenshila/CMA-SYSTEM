@@ -14,35 +14,10 @@ import {
   sendBulkMessageAction,
 } from '@/server/actions/records';
 import { isoDate } from '@/lib/dates';
+import { MEETING_TYPES, MEETING_STATUSES, ATTENDANCE_STATUSES } from '@/lib/meeting-meta';
 import type { ActionResult } from '@/server/actions/auth';
 
-export const MEETING_TYPES = [
-  { value: 'monthly', label: 'Monthly meeting' },
-  { value: 'general_assembly', label: 'General assembly' },
-  { value: 'committee', label: 'Committee' },
-  { value: 'executive', label: 'Executive' },
-  { value: 'deanery', label: 'Deanery' },
-  { value: 'diocesan', label: 'Diocesan' },
-  { value: 'national', label: 'National' },
-  { value: 'retreat', label: 'Retreat' },
-  { value: 'training', label: 'Training' },
-  { value: 'emergency', label: 'Emergency' },
-  { value: 'other', label: 'Other' },
-];
-
-const MEETING_STATUSES = [
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'ongoing', label: 'Ongoing' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-const ATTENDANCE_STATUSES = [
-  { value: 'present', label: 'Present' },
-  { value: 'late', label: 'Late' },
-  { value: 'apology', label: 'Apology' },
-  { value: 'absent', label: 'Absent' },
-];
+export { MEETING_TYPES };
 
 /* ------------------------------------------------------------------ *
  * Meeting create / edit

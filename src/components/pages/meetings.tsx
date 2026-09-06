@@ -7,7 +7,8 @@ import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { fmtDate, fmtTime } from '@/lib/dates';
-import { NewMeetingButton, MEETING_TYPES } from '../forms/meeting-forms';
+import { NewMeetingButton } from '../forms/meeting-forms';
+import { MEETING_TYPES } from '@/lib/meeting-meta';
 
 const PER_PAGE = 15;
 
