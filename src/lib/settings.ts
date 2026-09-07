@@ -49,16 +49,24 @@ export async function setSetting(
   memoryCache.delete(key);
 }
 
+/**
+ * Replace (not merge) a setting group. Previously this ran a bare UPDATE, so a
+ * key with no row yet was silently dropped — the caller saw success while the
+ * value never changed. Upsert so first writes behave like every other write.
+ */
 export async function replaceSetting(
   key: string,
   value: SettingValue,
   opts: { updatedBy?: number | null } = {},
 ) {
-  await execute('UPDATE system_settings SET value = $2, updated_by = $3 WHERE key = $1', [
-    key,
-    JSON.stringify(value),
-    opts.updatedBy ?? null,
-  ]);
+  await execute(
+    `INSERT INTO system_settings (key, value, updated_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (key) DO UPDATE
+       SET value = EXCLUDED.value,
+           updated_by = EXCLUDED.updated_by`,
+    [key, JSON.stringify(value), opts.updatedBy ?? null],
+  );
   memoryCache.delete(key);
 }
 
