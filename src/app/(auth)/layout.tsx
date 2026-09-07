@@ -1,5 +1,6 @@
-import { Cross, ShieldCheck, Users, Landmark, Banknote, HeartPulse } from 'lucide-react';
+import { ShieldCheck, Users, Landmark, Banknote, HeartPulse } from 'lucide-react';
 import { getOrganisation } from '@/lib/settings';
+import BrandLogo from '@/components/brand/BrandLogo';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,9 +23,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
 
         <div className="relative">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold-500 text-navy-950 shadow-lg">
-              <Cross className="h-6 w-6" />
-            </span>
+            <BrandLogo org={org} size={48} />
             <div>
               <p className="text-lg font-extrabold leading-tight tracking-tight">{org.name}</p>
               <p className="text-xs text-slate-300">

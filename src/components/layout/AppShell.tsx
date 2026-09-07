@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn, Avatar } from '@/components/ui/primitives';
 import { Toaster, toast } from '@/components/ui/client';
+import BrandLogo from '@/components/brand/BrandLogo';
 import type { NavSection } from '@/components/nav';
 
 const ICONS: Record<string, any> = {
@@ -81,7 +82,7 @@ export default function AppShell({
   user: ShellUser;
   nav: NavSection[];
   unread: number;
-  organisation: { name: string; short_name: string; parish: string; motto?: string };
+  organisation: { name: string; short_name: string; parish: string; motto?: string; logo_url?: string | null };
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -99,9 +100,7 @@ export default function AppShell({
   const sidebar = (
     <div className="flex h-full flex-col bg-navy-950 text-white">
       <div className="relative flex items-center gap-3 border-b border-white/10 px-4 py-4 bg-grid">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-500 text-navy-950 shadow">
-          <Cross className="h-5 w-5" />
-        </span>
+        <BrandLogo org={organisation} size={40} />
         <div className="min-w-0">
           <p className="truncate text-sm font-bold leading-tight">{organisation.short_name || 'CMA'}</p>
           <p className="truncate text-[11px] text-slate-300">{organisation.parish || 'Member Management'}</p>

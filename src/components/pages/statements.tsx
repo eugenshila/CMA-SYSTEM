@@ -8,6 +8,7 @@ import type { SessionUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { memberStatement } from '@/lib/payments';
 import { getOrganisation } from '@/lib/settings';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { money, num } from '@/lib/money';
 import { fmtDate, fmtDateTime } from '@/lib/dates';
 
@@ -94,6 +95,16 @@ export default async function StatementsPage({
       </div>
 
       <Card>
+        <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-slate-200 pb-4">
+          <BrandLogo org={org} size={44} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-bold text-navy-900">{org.name}</p>
+            <p className="truncate text-xs text-slate-500">
+              {[org.scc, org.church, org.parish, org.deanery, org.diocese, org.archdiocese, org.country].filter(Boolean).join(' · ') || 'Member statement'}
+            </p>
+          </div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Member statement</p>
+        </div>
         <CardHeader title="Member & account summary" subtitle={`Generated ${fmtDateTime(statement.generated_at)} by ${org.name}.`} />
         <KeyValue
           columns={3}
