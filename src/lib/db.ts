@@ -9,11 +9,18 @@ const { Pool, types } = pg;
 types.setTypeParser(20, (v: string) => (v === null ? null : parseInt(v, 10)));
 types.setTypeParser(1700, (v: string) => (v === null ? null : parseFloat(v)));
 
-let pool: pg.Pool | null = null;
+// In dev, Next.js hot-reload re-evaluates this module and a module-level
+// `let pool` would build a fresh Pool each time — every instance holding its
+// own connection(s). Against the bundled single-threaded PGlite server,
+// concurrent queries from those leaked pools collide and sockets get
+// destroyed (client-side ECONNRESET bursts). Anchoring the pool on
+// globalThis keeps exactly one pool (and with PGPOOL_MAX=1, one connection)
+// alive across reloads — the same pattern used for Prisma in Next dev.
+const globalForPg = globalThis as unknown as { __cmaPgPool?: pg.Pool };
 
 export function getPool(): pg.Pool {
-  if (!pool) {
-    pool = new Pool({
+  if (!globalForPg.__cmaPgPool) {
+    const p = new Pool({
       connectionString: env.DATABASE_URL,
       max: parseInt(process.env.PGPOOL_MAX || '8', 10),
       idleTimeoutMillis: 30_000,
@@ -23,9 +30,10 @@ export function getPool(): pg.Pool {
         : undefined,
       allowExitOnIdle: false,
     });
-    pool.on('error', (err) => console.error('[db] idle client error', err.message));
+    p.on('error', (err) => console.error('[db] idle client error', err.message));
+    globalForPg.__cmaPgPool = p;
   }
-  return pool;
+  return globalForPg.__cmaPgPool;
 }
 
 export type Queryable = pg.Pool | pg.PoolClient;
@@ -48,7 +56,7 @@ export function isConnectionError(err: any): boolean {
   return /connection terminated unexpectedly|read ECONNRESET|server closed the connection|terminating connection/i.test(String(err.message || ''));
 }
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 4): Promise<T> {
   let attempt = 0;
   for (;;) {
     try {
@@ -56,7 +64,10 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
     } catch (err) {
       if (attempt >= retries || !isConnectionError(err)) throw err;
       attempt += 1;
-      await new Promise((r) => setTimeout(r, 120 * attempt));
+      // Exponential backoff (150/300/600/1200ms). The single-threaded PGlite dev
+      // server can drop sockets for a few seconds while Next.js compiles a route;
+      // a wider retry window rides out that starvation instead of surfacing a 500.
+      await new Promise((r) => setTimeout(r, 150 * 2 ** (attempt - 1)));
     }
   }
 }
