@@ -44,7 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }}
       nav={filterNav(user)}
       unread={unread}
-      organisation={{ name: org.name, short_name: org.short_name, parish: org.parish, motto: org.motto }}
+      organisation={{ name: org.name, short_name: org.short_name, parish: org.parish, motto: org.motto, logo_url: org.logo_url }}
     >
       {user.must_change_password ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">

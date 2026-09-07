@@ -8,6 +8,7 @@ import type { SessionUser } from '@/lib/auth';
 import { one } from '@/lib/db';
 import { paymentAllocations, ALLOCATION_LABELS, type AllocationType } from '@/lib/payments';
 import { getOrganisation } from '@/lib/settings';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { money, num } from '@/lib/money';
 import { fmtDateTime } from '@/lib/dates';
 
@@ -50,14 +51,17 @@ export default async function ReceiptDetailPage({ receiptNo, user }: { receiptNo
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2 print:shadow-none">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-            <div>
-              <p className="text-lg font-bold text-navy-900">{org.name}</p>
-              <p className="text-xs text-slate-500">
-                {[org.scc, org.church, org.parish, org.deanery, org.diocese, org.archdiocese, org.country].filter(Boolean).join(' · ')}
-              </p>
-              {org.phone || org.email ? (
-                <p className="mt-1 text-xs text-slate-500">{[org.phone, org.email].filter(Boolean).join(' · ')}</p>
-              ) : null}
+            <div className="flex min-w-0 items-start gap-3">
+              <BrandLogo org={org} size={48} />
+              <div className="min-w-0">
+                <p className="text-lg font-bold text-navy-900">{org.name}</p>
+                <p className="text-xs text-slate-500">
+                  {[org.scc, org.church, org.parish, org.deanery, org.diocese, org.archdiocese, org.country].filter(Boolean).join(' · ')}
+                </p>
+                {org.phone || org.email ? (
+                  <p className="mt-1 text-xs text-slate-500">{[org.phone, org.email].filter(Boolean).join(' · ')}</p>
+                ) : null}
+              </div>
             </div>
             <div className="text-right">
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Official receipt</p>
