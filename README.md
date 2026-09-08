@@ -75,3 +75,27 @@ runs `npm run db:migrate` before `npm start`, so schema changes roll out with th
 2. Add the app service from this repo; reference `DATABASE_URL` from the database service.
 3. Set `AUTH_SECRET`, `ENCRYPTION_KEY`, `APP_URL` (and the `MPESA_*` values for payments).
 4. Deploy — migrations run automatically at startup.
+
+## Windows desktop installer
+
+The same application ships as a native desktop app. It embeds the PostgreSQL
+database (PGlite), runs the schema migrations automatically on first launch and
+serves the Next.js app locally — no server, Docker or internet connection needed.
+
+```bash
+npm install
+npm run dist:win     # builds release/CMA System-Setup-*.exe (NSIS installer)
+npm run dist         # current platform
+npm run dist:dir     # unpacked build (fast local smoke test)
+npm run desktop:dev  # dev mode: npm run dev:all first, then CMA_DEV_URL=http://localhost:3000 electron .
+```
+
+The installer is a normal per-user install. All data lives under the user's
+application data directory (`%APPDATA%/CMA System`), with the database in
+`pglite/` and a generated Super Administrator login written to
+`first-run-credentials.txt` on first launch.
+
+CI builds Windows (NSIS), Linux (AppImage) and macOS (DMG) installers on every
+`v*` tag via `.github/workflows/desktop-installer.yml`. See
+[docs/desktop.md](docs/desktop.md) for the full details.
+
