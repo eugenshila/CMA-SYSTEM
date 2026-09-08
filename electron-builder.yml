@@ -1,0 +1,59 @@
+appId: org.cma.system
+productName: CMA System
+copyright: Copyright © Catholic Men Association
+
+directories:
+  output: release
+  buildResources: build
+
+# The packaged app ships the Next.js standalone server, the Electron shell, the
+# desktop bootstrap (embedded PGlite + migrations) and the SQL migration files.
+# `node_modules` (production dependencies only) is added automatically by
+# electron-builder, so @electric-sql/pglite, pglite-socket, pg and bcryptjs ride
+# along while dev-only tools (electron, sharp, typescript, …) stay out.
+files:
+  - electron/**
+  - desktop/**
+  - .next/standalone/**
+  - .next/static/**
+  - public/**
+  - db/migrations/**
+  - package.json
+
+# PGlite loads a WebAssembly binary and its native add-ons; unpack so they are
+# readable as real files from the asar archive.
+asarUnpack:
+  - node_modules/@electric-sql/**
+  - node_modules/**/*.wasm
+  - node_modules/**/*.node
+
+extraMetadata:
+  main: electron/main.cjs
+
+win:
+  target:
+    - nsis
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CMA System
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+mac:
+  target:
+    - dmg
+  icon: build/icon.png
+  category: public.app-category.business
+
+linux:
+  target:
+    - AppImage
+  icon: build/icon.png
+  category: Office
+  maintainer: Catholic Men Association
+
+publish: null

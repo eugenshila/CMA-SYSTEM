@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CMA System</title>
+    <style>
+      :root {
+        --navy: #0e2340;
+        --navy-deep: #081527;
+        --gold: #d4af37;
+        --text: #e9eef7;
+        --muted: #9fb0c9;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: radial-gradient(120% 120% at 50% 0%, #16305a 0%, var(--navy) 45%, var(--navy-deep) 100%);
+        color: var(--text);
+        -webkit-user-select: none;
+        user-select: none;
+        overflow: hidden;
+      }
+      .wrap {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 28px;
+        text-align: center;
+      }
+      .crest {
+        width: 88px;
+        height: 88px;
+        filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35));
+        animation: rise 0.6s ease-out;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+      }
+      h1 span {
+        color: var(--gold);
+      }
+      .status {
+        font-size: 13px;
+        color: var(--muted);
+        min-height: 18px;
+        max-width: 380px;
+        line-height: 1.4;
+      }
+      .bar {
+        width: 220px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        overflow: hidden;
+      }
+      .bar::after {
+        content: '';
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        animation: sweep 1.4s ease-in-out infinite;
+      }
+      .foot {
+        position: absolute;
+        bottom: 14px;
+        left: 0;
+        right: 0;
+        font-size: 11px;
+        color: rgba(233, 238, 247, 0.45);
+      }
+      @keyframes sweep {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(340%);
+        }
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- CMA crest (public/brand/logo-mark.svg, inlined for the file:// splash) -->
+      <svg class="crest" viewBox="0 0 96 96" role="img" aria-label="CMA crest" xmlns="http://www.w3.org/2000/svg">
+        <path d="M48 4 L84 13 V47 C84 69.5 69.5 84.5 48 93 C26.5 84.5 12 69.5 12 47 V13 Z" fill="#0e2340"/>
+        <path d="M48 8.5 L79.5 16.5 V46.5 C79.5 66.5 66.5 80 48 88 C29.5 80 16.5 66.5 16.5 46.5 V16.5 Z" fill="#081527" stroke="#d4af37" stroke-width="2"/>
+        <path d="M45 20 v10 h-11 v6 h11 v20 h6 v-20 h11 v-6 h-11 v-10 z" fill="#d4af37"/>
+      </svg>
+      <h1>CMA <span>Management System</span></h1>
+      <div class="status" id="status">Starting…</div>
+      <div class="bar"></div>
+    </div>
+    <div class="foot">Men of Faith · Men of Service</div>
+    <script>
+      try {
+        if (window.splash && typeof window.splash.onStatus === 'function') {
+          window.splash.onStatus(function (message) {
+            document.getElementById('status').textContent = message;
+          });
+        }
+      } catch (e) {
+        /* preload unavailable (e.g. opened directly in a browser) — ignore */
+      }
+    </script>
+  </body>
+</html>

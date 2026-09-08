@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Self-contained server for the Electron desktop package.
+  output: 'standalone',
   images: {
     unoptimized: true,
   },
