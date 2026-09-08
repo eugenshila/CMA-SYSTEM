@@ -250,7 +250,7 @@ export async function applyAllocation(
 
   switch (a.type) {
     case 'monthly_contribution': {
-      const type = await monthlyContributionType();
+      const type = await monthlyContributionType(client);
       const period = a.period || periodKey(ctx.paymentDate);
       await applyContributionPayment({
         memberId: member.id,
@@ -487,7 +487,7 @@ async function reverseAllocation(client: PoolClient, allocation: any, payment: a
   const amount = -num(allocation.amount);
   switch (allocation.allocation_type) {
     case 'monthly_contribution': {
-      const type = await monthlyContributionType();
+      const type = await monthlyContributionType(client);
       const row = await one<any>(
         `SELECT * FROM member_contributions WHERE member_id = $1 AND contribution_type_id = $2 AND period = $3`,
         [payment.member_id, type!.id, allocation.period],

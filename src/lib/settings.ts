@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import type { PoolClient } from 'pg';
 import { one, query, execute } from './db';
 
 export type SettingValue = Record<string, any>;
@@ -20,16 +21,22 @@ export function invalidateSettings() {
   memoryCache.clear();
 }
 
-/** Fetch a single setting group (object) with a short in-process cache. */
+/** Fetch a single setting group (object) with a short in-process cache.
+ *  When a `client` is supplied (inside a transaction with PGPOOL_MAX=1),
+ *  the query uses that client and bypasses the in-process cache to avoid
+ *  deadlocking on the single pooled connection. */
 export async function getSetting<T extends SettingValue = SettingValue>(
   key: string,
   fallback: T = {} as T,
+  client?: PoolClient,
 ): Promise<T> {
-  const cached = memoryCache.get(key);
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.value as T;
-  const row = await one<{ value: SettingValue }>('SELECT value FROM system_settings WHERE key = $1', [key]);
+  if (!client) {
+    const cached = memoryCache.get(key);
+    if (cached && Date.now() - cached.at < TTL_MS) return cached.value as T;
+  }
+  const row = await one<{ value: SettingValue }>('SELECT value FROM system_settings WHERE key = $1', [key], client);
   const value = (row?.value ?? fallback) as T;
-  memoryCache.set(key, { value, at: Date.now() });
+  if (!client) memoryCache.set(key, { value, at: Date.now() });
   return value;
 }
 
@@ -97,8 +104,8 @@ export interface OrganisationSettings {
   stamp_url: string | null;
 }
 
-export const getOrganisation = cache(async (): Promise<OrganisationSettings> => {
-  const s = await getSetting<OrganisationSettings>('organisation');
+export const getOrganisation = cache(async (client?: PoolClient): Promise<OrganisationSettings> => {
+  const s = await getSetting<OrganisationSettings>('organisation', {} as OrganisationSettings, client);
   return {
     name: s.name || 'Catholic Men Association (CMA)',
     short_name: s.short_name || 'CMA',
@@ -120,8 +127,8 @@ export const getOrganisation = cache(async (): Promise<OrganisationSettings> => 
   };
 });
 
-export const getContributionSettings = cache(async () => {
-  const s = await getSetting('contributions');
+export const getContributionSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('contributions', {}, client);
   return {
     monthly_amount: Number(s.monthly_amount ?? 200),
     due_day: Number(s.due_day ?? 10),
@@ -135,8 +142,8 @@ export const getContributionSettings = cache(async () => {
   };
 });
 
-export const getShareSettings = cache(async () => {
-  const s = await getSetting('shares');
+export const getShareSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('shares', {}, client);
   return {
     value_per_share: Number(s.value_per_share ?? 1000),
     min_shares: Number(s.min_shares ?? 1),
@@ -146,8 +153,8 @@ export const getShareSettings = cache(async () => {
   };
 });
 
-export const getSaccoSettings = cache(async () => {
-  const s = await getSetting('sacco');
+export const getSaccoSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('sacco', {}, client);
   return {
     account_prefix: String(s.account_prefix ?? 'SDP'),
     min_monthly_savings: Number(s.min_monthly_savings ?? 500),
@@ -158,8 +165,8 @@ export const getSaccoSettings = cache(async () => {
   };
 });
 
-export const getLoanSettings = cache(async () => {
-  const s = await getSetting('loans');
+export const getLoanSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('loans', {}, client);
   return {
     default_interest_method: String(s.default_interest_method ?? 'reducing'),
     first_due_date_offset_days: Number(s.first_due_date_offset_days ?? 30),
@@ -172,8 +179,8 @@ export const getLoanSettings = cache(async () => {
   };
 });
 
-export const getGuarantorSettings = cache(async () => {
-  const s = await getSetting('guarantors');
+export const getGuarantorSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('guarantors', {}, client);
   return {
     max_exposure_multiple: Number(s.max_exposure_multiple ?? 3),
     max_guarantees_active: Number(s.max_guarantees_active ?? 5),
@@ -182,8 +189,8 @@ export const getGuarantorSettings = cache(async () => {
   };
 });
 
-export const getPaymentSettings = cache(async () => {
-  const s = await getSetting('payments');
+export const getPaymentSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('payments', {}, client);
   return {
     mpesa: {
       enabled: Boolean(s.mpesa?.enabled),
@@ -202,8 +209,8 @@ export const getPaymentSettings = cache(async () => {
   } as any;
 });
 
-export const getNotificationSettings = cache(async () => {
-  const s = await getSetting('notifications');
+export const getNotificationSettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('notifications', {}, client);
   return {
     channels: {
       in_system: s.channels?.in_system !== false,
@@ -221,8 +228,8 @@ export const getNotificationSettings = cache(async () => {
   };
 });
 
-export const getSecuritySettings = cache(async () => {
-  const s = await getSetting('security');
+export const getSecuritySettings = cache(async (client?: PoolClient) => {
+  const s = await getSetting('security', {}, client);
   return {
     password_min_length: Number(s.password_min_length ?? 8),
     max_failed_attempts: Number(s.max_failed_attempts ?? 5),

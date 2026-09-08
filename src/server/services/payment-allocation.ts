@@ -14,7 +14,7 @@ export async function applyAllocationToExistingPayment(opts: {
   allocations: Allocation[];
   actor: { id: number; name: string };
 }) {
-  return tx(async (client) => {
+  const result = await tx(async (client) => {
     const payment = await one<any>('SELECT * FROM payments WHERE id = $1 FOR UPDATE', [opts.paymentId], client);
     if (!payment) throw new Error('Payment not found.');
 
@@ -75,20 +75,24 @@ export async function applyAllocationToExistingPayment(opts: {
       client,
     });
 
-    await notify({
-      memberId: payment.member_id,
-      title: `Payment allocated — ${payment.receipt_no}`,
-      body: `KSh ${total.toLocaleString()} from your payment ${payment.receipt_no} has been allocated to: ${opts.allocations
-        .map((a) => a.type.replace(/_/g, ' '))
-        .join(', ')}.`,
-      category: 'payment',
-      link: `/receipts/${payment.receipt_no}`,
-      referenceType: 'payment',
-      referenceId: payment.id,
-    });
-
-    return { total };
+    return { total, memberId: payment.member_id, receiptNo: payment.receipt_no, paymentId: payment.id };
   });
+
+  // Notify outside the transaction — with PGPOOL_MAX=1 the single PGlite connection
+  // is held for the whole tx, so any extra query inside would deadlock.
+  await notify({
+    memberId: result.memberId,
+    title: `Payment allocated — ${result.receiptNo}`,
+    body: `KSh ${result.total.toLocaleString()} from your payment ${result.receiptNo} has been allocated to: ${opts.allocations
+      .map((a) => a.type.replace(/_/g, ' '))
+      .join(', ')}.`,
+    category: 'payment',
+    link: `/receipts/${result.receiptNo}`,
+    referenceType: 'payment',
+    referenceId: result.paymentId,
+  });
+
+  return { total: result.total };
 }
 
 function referenceTypeFor(type: string) {

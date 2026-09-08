@@ -19,7 +19,7 @@ export async function ensureSaccoAccount(
   const existing = await getSaccoAccount(memberId, opts.client);
   if (existing) return existing;
 
-  const settings = await getSaccoSettings();
+  const settings = await getSaccoSettings(opts.client);
   const seq = await one<{ n: number }>('SELECT count(*)::int + 1 AS n FROM sacco_accounts', [], opts.client);
   const accountNo = `${settings.account_prefix}-${String(seq?.n ?? 1).padStart(5, '0')}`;
   const parish = await one<{ parish_id: number }>('SELECT parish_id FROM members WHERE id = $1', [memberId], opts.client);
@@ -142,7 +142,7 @@ export interface SharePurchase {
 
 export async function purchaseShares(input: SharePurchase) {
   const client = input.client;
-  const settings = await getShareSettings();
+  const settings = await getShareSettings(client);
   const account = await ensureSaccoAccount(input.memberId, { createdBy: input.recordedBy, client });
   const valuePerShare = num(settings.value_per_share) || 1000;
 

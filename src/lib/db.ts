@@ -20,9 +20,12 @@ const globalForPg = globalThis as unknown as { __cmaPgPool?: pg.Pool };
 
 export function getPool(): pg.Pool {
   if (!globalForPg.__cmaPgPool) {
+    // PGlite is single-threaded WASM — one connection avoids ECONNRESET bursts.
+    // Production (Railway) can override via PGPOOL_MAX=8..10. Do not raise as a
+    // workaround for deadlocks; fix the transaction to use a single client instead.
     const p = new Pool({
       connectionString: env.DATABASE_URL,
-      max: parseInt(process.env.PGPOOL_MAX || '8', 10),
+      max: parseInt(process.env.PGPOOL_MAX || '1', 10),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 15_000,
       ssl: env.DATABASE_URL.includes('sslmode=require') || process.env.PGSSL === '1'

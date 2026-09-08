@@ -12,8 +12,8 @@ export type ContributionStatus = 'paid' | 'partial' | 'unpaid' | 'overdue' | 'ex
  * MONTHLY CONTRIBUTION BILLING
  * ------------------------------------------------------------------ */
 
-export async function monthlyContributionType() {
-  return one<any>(`SELECT * FROM contribution_types WHERE key = 'monthly_contribution' LIMIT 1`);
+export async function monthlyContributionType(client?: PoolClient) {
+  return one<any>(`SELECT * FROM contribution_types WHERE key = 'monthly_contribution' LIMIT 1`, [], client);
 }
 
 /** Member scope used by case based (welfare / funeral / wedding / project) collections. */
@@ -67,7 +67,7 @@ export async function getOrCreateContribution(opts: {
   client?: PoolClient;
 }) {
   const client = opts.client;
-  const settings = await getContributionSettings();
+  const settings = await getContributionSettings(client);
   const existing = await one<any>(
     `SELECT * FROM member_contributions WHERE member_id = $1 AND contribution_type_id = $2 AND period = $3`,
     [opts.memberId, opts.typeId, opts.period],
@@ -115,7 +115,7 @@ export async function getOrCreateContribution(opts: {
 export async function recalcContribution(contributionId: number, client?: PoolClient) {
   const row = await one<any>('SELECT * FROM member_contributions WHERE id = $1', [contributionId], client);
   if (!row) return null;
-  const settings = await getContributionSettings();
+  const settings = await getContributionSettings(client);
   const penalty =
     settings.penalty_enabled && statusFor(row) === 'overdue' && num(row.penalty) === 0
       ? round2(settings.penalty_amount)
