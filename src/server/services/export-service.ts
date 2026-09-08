@@ -18,6 +18,7 @@ import {
   fundBalances,
   reconciliationReport,
   attendanceReport,
+  insuranceReport,
 } from '@/lib/reports';
 import { listPayments, memberStatement, ALLOCATION_LABELS, type AllocationType } from '@/lib/payments';
 import { CASE_TABLES, caseProgress, type CaseType } from '@/lib/contributions';
@@ -51,6 +52,7 @@ const EXPORT_PERMISSIONS: Record<string, string> = {
   financial: 'finance.view',
   attendance: 'attendance.view',
   audit: 'audit.view',
+  insurance: 'insurance.view',
 };
 
 export function canExport(user: SessionUser, report: string): boolean {
@@ -741,6 +743,134 @@ async function attendanceSheets(params: URLSearchParams): Promise<ExportResult> 
   };
 }
 
+async function insuranceSheets(params: URLSearchParams, user: SessionUser): Promise<ExportResult> {
+  const parishId = user.scope_parish_id ? Number(user.scope_parish_id) : Number(params.get('parish_id')) || null;
+  const companyId = Number(params.get('company_id')) || null;
+  const status = params.get('status') || undefined;
+  const report = await insuranceReport({ parishId, companyId, status });
+
+  return {
+    title: 'Last Respect Insurance — funeral & end-of-life cover (50k-500k, 18-65, children 1m-24y/25 school-going, parents, 48h payout, illness & accident)',
+    fileName: 'cma-last-respect-insurance',
+    filters: [
+      parishId ? `Parish filter: ${parishId}` : 'All parishes (SJMKW, SPPM, SFAS)',
+      companyId ? `Company filter: ${companyId}` : 'All 30 insurers',
+      status ? `Status: ${status}` : 'All statuses',
+      `${report.summary?.total || 0} policies · coverage ${ksh(report.summary?.total_coverage)} · premiums ${ksh(report.summary?.total_premiums)}`,
+      'No medical records / hospital fields — funeral only, immediate cash payout',
+    ].filter(Boolean) as string[],
+    sheets: [
+      {
+        name: 'Policies',
+        title: 'Last Respect Insurance policies',
+        columns: [
+          { key: 'policy_no', label: 'Policy No', width: 100 },
+          { key: 'membership_no', label: 'CMA No', width: 90 },
+          { key: 'full_name', label: 'Principal (18-65)', width: 170 },
+          { key: 'phone', label: 'Phone', width: 95 },
+          { key: 'parish_name', label: 'Parish', width: 120 },
+          { key: 'company_name', label: 'Insurance Company', width: 140 },
+          { key: 'coverage_type', label: 'Type', width: 90 },
+          { key: 'coverage_amount', label: 'Coverage (50k-500k)', align: 'right', width: 95, format: ksh },
+          { key: 'premium_amount', label: 'Premium', align: 'right', width: 80, format: ksh },
+          { key: 'premium_frequency', label: 'Frequency', width: 70 },
+          { key: 'beneficiary_name', label: 'Beneficiary', width: 150 },
+          { key: 'beneficiary_relationship', label: 'Rel', width: 70 },
+          { key: 'cause_of_death_covered', label: 'Cause', width: 110 },
+          { key: 'waiting_period_days', label: 'Waiting days', align: 'right', width: 70 },
+          { key: 'payout_timeline_hours', label: 'Payout h', align: 'right', width: 60 },
+          { key: 'start_date', label: 'Start', width: 85, format: date },
+          { key: 'next_premium_due', label: 'Next due', width: 85, format: date },
+          { key: 'total_premiums_paid', label: 'Total paid', align: 'right', width: 85, format: ksh },
+          { key: 'status', label: 'Status', width: 75 },
+          { key: 'payment_status', label: 'Pay status', width: 75 },
+        ],
+        rows: report.policies,
+        totals: {
+          full_name: `${report.policies.length} policies`,
+          coverage_amount: ksh(report.summary?.total_coverage),
+          total_premiums_paid: ksh(report.summary?.total_premiums),
+        },
+      },
+      {
+        name: 'Dependents',
+        title: 'Dependents — spouse/children (1m-24y, 25 school-going)/parents/in-laws',
+        columns: [
+          { key: 'policy_no', label: 'Policy', width: 100 },
+          { key: 'principal_name', label: 'Principal', width: 150 },
+          { key: 'membership_no', label: 'CMA No', width: 90 },
+          { key: 'relationship', label: 'Relationship', width: 100 },
+          { key: 'full_name', label: 'Dependent Name', width: 170 },
+          { key: 'age', label: 'Age', align: 'right', width: 50 },
+          { key: 'coverage_amount', label: 'Coverage', align: 'right', width: 90, format: ksh },
+          { key: 'is_school_going', label: 'School-going', width: 80, format: (v: any) => (v ? 'Yes (up to 25)' : 'No') },
+          { key: 'company_name', label: 'Company', width: 120 },
+        ],
+        rows: report.dependents,
+      },
+      {
+        name: 'Premiums',
+        title: 'Premium payments',
+        columns: [
+          { key: 'premium_period', label: 'Period', width: 70 },
+          { key: 'paid_at', label: 'Paid at', width: 110, format: dateTime },
+          { key: 'policy_no', label: 'Policy', width: 100 },
+          { key: 'membership_no', label: 'CMA No', width: 90 },
+          { key: 'full_name', label: 'Member', width: 150 },
+          { key: 'amount', label: 'Amount', align: 'right', width: 85, format: ksh },
+          { key: 'method', label: 'Method', width: 70 },
+          { key: 'receipt_no', label: 'Receipt', width: 100 },
+          { key: 'company_name', label: 'Company', width: 120 },
+        ],
+        rows: report.premiums,
+      },
+      {
+        name: 'Claims 48h',
+        title: 'Claims — payout within 48 hours, illness & accident',
+        columns: [
+          { key: 'policy_no', label: 'Policy', width: 100 },
+          { key: 'claim_reference', label: 'Claim Ref', width: 120 },
+          { key: 'membership_no', label: 'CMA No', width: 90 },
+          { key: 'full_name', label: 'Principal', width: 150 },
+          { key: 'beneficiary_name', label: 'Beneficiary', width: 150 },
+          { key: 'beneficiary_relationship', label: 'Rel', width: 70 },
+          { key: 'coverage_amount', label: 'Coverage', align: 'right', width: 90, format: ksh },
+          { key: 'claim_amount', label: 'Claim Amt', align: 'right', width: 90, format: ksh },
+          { key: 'claim_paid_amount', label: 'Paid', align: 'right', width: 90, format: ksh },
+          { key: 'date_of_death', label: 'Death', width: 85, format: date },
+          { key: 'date_claim_filed', label: 'Filed', width: 85, format: date },
+          { key: 'claim_paid_at', label: 'Paid At', width: 110, format: dateTime },
+          { key: 'claim_payout_hours', label: 'Hours', align: 'right', width: 60 },
+          { key: 'claim_status', label: 'Status', width: 80 },
+          { key: 'company_name', label: 'Company', width: 120 },
+          { key: 'parish_name', label: 'Parish', width: 110 },
+        ],
+        rows: report.claims,
+      },
+      {
+        name: 'By company',
+        title: 'Coverage by insurance company (30 insurers dropdown)',
+        columns: [
+          { key: 'label', label: 'Company', width: 180 },
+          { key: 'policies', label: 'Policies', align: 'right', width: 70 },
+          { key: 'coverage', label: 'Coverage', align: 'right', width: 100, format: ksh },
+          { key: 'premiums', label: 'Premiums', align: 'right', width: 100, format: ksh },
+        ],
+        rows: report.byCompany,
+      },
+      {
+        name: 'By status',
+        title: 'Policies by status',
+        columns: [
+          { key: 'label', label: 'Status', width: 120 },
+          { key: 'value', label: 'Count', align: 'right', width: 80 },
+        ],
+        rows: report.byStatus,
+      },
+    ],
+  };
+}
+
 async function auditSheets(params: URLSearchParams): Promise<ExportResult> {
   const rows = await query<any>(
     `SELECT a.created_at, a.user_name, a.action, a.entity_type, a.entity_label, a.description, a.severity, a.ip_address
@@ -832,6 +962,8 @@ export async function buildExport(report: string, params: URLSearchParams, user:
       return attendanceSheets(params);
     case 'audit':
       return auditSheets(params);
+    case 'insurance':
+      return insuranceSheets(params, user);
     default:
       throw new Error(`Unknown export "${report}"`);
   }

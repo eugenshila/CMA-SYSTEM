@@ -105,7 +105,7 @@ export interface OrganisationSettings {
 }
 
 export const getOrganisation = cache(async (client?: PoolClient): Promise<OrganisationSettings> => {
-  const s = await getSetting<OrganisationSettings>('organisation', {} as OrganisationSettings, client);
+  const s = (await getSetting<OrganisationSettings>('organisation', {} as OrganisationSettings, client)) as any;
   return {
     name: s.name || 'Catholic Men Association (CMA)',
     short_name: s.short_name || 'CMA',
@@ -128,7 +128,7 @@ export const getOrganisation = cache(async (client?: PoolClient): Promise<Organi
 });
 
 export const getContributionSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('contributions', {}, client);
+  const s = (await getSetting('contributions', {} as any, client)) as any;
   return {
     monthly_amount: Number(s.monthly_amount ?? 200),
     due_day: Number(s.due_day ?? 10),
@@ -143,7 +143,7 @@ export const getContributionSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getShareSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('shares', {}, client);
+  const s = (await getSetting('shares', {} as any, client)) as any;
   return {
     value_per_share: Number(s.value_per_share ?? 1000),
     min_shares: Number(s.min_shares ?? 1),
@@ -154,7 +154,7 @@ export const getShareSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getSaccoSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('sacco', {}, client);
+  const s = (await getSetting('sacco', {} as any, client)) as any;
   return {
     account_prefix: String(s.account_prefix ?? 'SDP'),
     min_monthly_savings: Number(s.min_monthly_savings ?? 500),
@@ -166,7 +166,7 @@ export const getSaccoSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getLoanSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('loans', {}, client);
+  const s = (await getSetting('loans', {} as any, client)) as any;
   return {
     default_interest_method: String(s.default_interest_method ?? 'reducing'),
     first_due_date_offset_days: Number(s.first_due_date_offset_days ?? 30),
@@ -180,7 +180,7 @@ export const getLoanSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getGuarantorSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('guarantors', {}, client);
+  const s = (await getSetting('guarantors', {} as any, client)) as any;
   return {
     max_exposure_multiple: Number(s.max_exposure_multiple ?? 3),
     max_guarantees_active: Number(s.max_guarantees_active ?? 5),
@@ -190,7 +190,7 @@ export const getGuarantorSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getPaymentSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('payments', {}, client);
+  const s = (await getSetting('payments', {} as any, client)) as any;
   return {
     mpesa: {
       enabled: Boolean(s.mpesa?.enabled),
@@ -210,7 +210,7 @@ export const getPaymentSettings = cache(async (client?: PoolClient) => {
 });
 
 export const getNotificationSettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('notifications', {}, client);
+  const s = (await getSetting('notifications', {} as any, client)) as any;
   return {
     channels: {
       in_system: s.channels?.in_system !== false,
@@ -224,12 +224,12 @@ export const getNotificationSettings = cache(async (client?: PoolClient) => {
     smtp_from: String(s.smtp_from ?? 'no-reply@cma.or.ke'),
     reminder_days_before_due: Number(s.reminder_days_before_due ?? 3),
     escalation_days_after_due: Number(s.escalation_days_after_due ?? 7),
-    _raw: s,
+    _raw: s as any,
   };
 });
 
 export const getSecuritySettings = cache(async (client?: PoolClient) => {
-  const s = await getSetting('security', {}, client);
+  const s = (await getSetting('security', {} as any, client)) as any;
   return {
     password_min_length: Number(s.password_min_length ?? 8),
     max_failed_attempts: Number(s.max_failed_attempts ?? 5),

@@ -169,7 +169,8 @@ async function main() {
       loans, loan_applications, share_transactions, shares, savings, sacco_transactions, sacco_accounts,
       project_contributions, special_projects, wedding_payments, wedding_cases, funeral_payments, funeral_cases,
       welfare_payments, welfare_cases, receipts, payment_allocations, mpesa_transactions, payments,
-      member_contributions, documents, member_documents, users, user_sessions, otp_codes, login_attempts, members,
+      member_contributions, insurance_premium_payments, insurance_dependents, last_respect_insurances,
+      documents, member_documents, users, user_sessions, otp_codes, login_attempts, members,
       small_christian_communities, churches, parishes, deaneries, dioceses
       RESTART IDENTITY CASCADE`);
     // TRUNCATE … CASCADE also clears reference tables that hold a FK to users/parishes
@@ -178,6 +179,13 @@ async function main() {
     const refSql = await fs.readFile(path.resolve(process.cwd(), 'db/migrations/002_reference_data.sql'), 'utf8');
     await client.query(refSql);
     console.log('[seed] reference data re-applied (loan_types, contribution_types, system_settings)');
+    try {
+      const insSql = await fs.readFile(path.resolve(process.cwd(), 'db/migrations/004_last_respect_insurance.sql'), 'utf8');
+      await client.query(insSql);
+      console.log('[seed] insurance reference data re-applied (insurance_companies, permissions)');
+    } catch (e: any) {
+      console.warn('[seed] could not re-apply 004 insurance migration:', e?.message);
+    }
   }
 
   const t0 = Date.now();
@@ -187,6 +195,14 @@ async function main() {
   const ctId = (key: string) => contributionTypes.find((c) => c.key === key)?.id;
   const loanTypes = (await client.query('SELECT id, code, interest_rate, interest_method, processing_fee_pct FROM loan_types')).rows;
   const ltId = (code: string) => loanTypes.find((l) => l.code === code)?.id;
+
+  // Insurance companies (from migration 004) — if table exists
+  let insuranceCompanies: any[] = [];
+  try {
+    insuranceCompanies = (await client.query('SELECT id, code, name FROM insurance_companies WHERE active = TRUE ORDER BY id')).rows;
+  } catch {
+    console.warn('[seed] insurance_companies table not found — insurance seed will be skipped');
+  }
 
   /* ---------------- organisation ---------------- */
   const countryId = (await client.query("SELECT id FROM countries WHERE code='KE'")).rows[0]?.id ?? 1;
@@ -1239,6 +1255,228 @@ async function main() {
     });
   }
 
+  /* ---------------- Last Respect Insurance (funeral/end-of-life) ----------------
+   * No medical records / hospital fields per spec.
+   * Coverage 50k-500k, principal 18-65, children 1m-24y up to 25 school-going,
+   * spouse/children/parents/in-laws, payout 48h, illness & accident with waiting period.
+   */
+  const insurancePolicies = new Table('last_respect_insurances', [
+    'id', 'policy_no', 'member_id', 'insurance_company_id', 'insurance_company_name', 'coverage_type',
+    'coverage_amount', 'premium_amount', 'premium_frequency', 'start_date', 'end_date',
+    'principal_dob', 'principal_age', 'beneficiary_name', 'beneficiary_relationship', 'beneficiary_phone', 'beneficiary_id_no',
+    'insured_name', 'insured_dob', 'covers_spouse', 'spouse_name', 'spouse_dob', 'spouse_coverage_amount',
+    'covers_children', 'children_count', 'children_coverage_amount',
+    'covers_parents', 'parents_count', 'parents_coverage_amount',
+    'waiting_period_days', 'payout_timeline_hours', 'cause_of_death_covered',
+    'premium_paid_to_date', 'next_premium_due', 'total_premiums_paid',
+    'status', 'payment_status',
+    'date_of_death', 'date_claim_filed', 'claim_amount', 'claim_status', 'claim_reference', 'claim_paid_at', 'claim_paid_amount', 'claim_payout_hours',
+    'notes', 'parish_id', 'created_by', 'created_at',
+  ]);
+  const insuranceDependents = new Table('insurance_dependents', [
+    'id', 'insurance_id', 'member_id', 'relationship', 'full_name', 'dob', 'age', 'id_no', 'phone', 'coverage_amount', 'is_school_going', 'notes', 'created_at',
+  ]);
+  const insurancePremiums = new Table('insurance_premium_payments', [
+    'id', 'insurance_id', 'member_id', 'payment_id', 'amount', 'premium_period', 'period_start', 'period_end', 'paid_at', 'method', 'receipt_no', 'recorded_by', 'notes', 'created_at',
+  ]);
+
+  let insuranceId = 0;
+  let insDepId = 0;
+  let insPremId = 0;
+
+  // Pick members for insurance: active, spread across parishes
+  const insuranceMemberPool = activeMembers.filter((m) => m.id <= 40);
+  const coverageOptions = [50000, 100000, 150000, 200000, 300000, 500000];
+  const premiumMap: Record<number, number> = { 50000: 350, 100000: 500, 150000: 750, 200000: 950, 300000: 1400, 500000: 2200 };
+
+  if (insuranceCompanies.length) {
+    for (let i = 0; i < Math.min(18, insuranceMemberPool.length); i++) {
+      const m = insuranceMemberPool[i];
+      const comp = insuranceCompanies[i % insuranceCompanies.length];
+      const cov = coverageOptions[i % coverageOptions.length];
+      const prem = premiumMap[cov];
+      insuranceId++;
+      const policyNo = `LR/${new Date().getFullYear()}/${String(insuranceId).padStart(4, '0')}`;
+      const startY = 2025 + (i % 2);
+      const startM = int(1, 10);
+      const startD = int(1, 28);
+      const startDate = date(startY, startM, startD);
+      const nextDue = date(2026, 9, int(1, 28));
+      const paidTo = date(2026, 8, int(1, 28));
+      const principalDob = m.date_of_birth;
+      const principalAge = new Date().getFullYear() - new Date(principalDob).getFullYear();
+      const coversSpouse = chance(0.7);
+      const coversChildren = chance(0.8);
+      const coversParents = chance(0.35);
+      const childrenCount = coversChildren ? int(1, 4) : 0;
+      const parentsCount = coversParents ? int(1, 2) : 0;
+      const status = i === 16 ? 'claimed' : i === 17 ? 'lapsed' : 'active';
+      const paymentStatus = status === 'lapsed' ? 'in_arrears' : 'current';
+
+      const beneficiaryName = m.next_of_kin || `${pick(FIRST)} ${m.last_name}`;
+      const benRel = pick(['spouse', 'child', 'parent', 'next_of_kin']);
+
+      insurancePolicies.add({
+        id: insuranceId,
+        policy_no: policyNo,
+        member_id: m.id,
+        insurance_company_id: comp.id,
+        insurance_company_name: comp.name,
+        coverage_type: pick(['last_respect', 'funeral', 'life', 'combined']),
+        coverage_amount: cov,
+        premium_amount: prem,
+        premium_frequency: pick(['monthly', 'monthly', 'quarterly', 'annual']),
+        start_date: startDate,
+        end_date: null,
+        principal_dob: principalDob,
+        principal_age: principalAge,
+        beneficiary_name: beneficiaryName,
+        beneficiary_relationship: benRel,
+        beneficiary_phone: m.next_of_kin_phone,
+        beneficiary_id_no: String(int(10000000, 39999999)),
+        insured_name: m.full_name,
+        insured_dob: principalDob,
+        covers_spouse: coversSpouse,
+        spouse_name: coversSpouse ? `${pick(FIRST)} ${m.last_name}` : null,
+        spouse_dob: coversSpouse ? date(int(1965, 1998), int(1, 12), int(1, 28)) : null,
+        spouse_coverage_amount: coversSpouse ? r2(cov * 0.8) : null,
+        covers_children: coversChildren,
+        children_count: childrenCount,
+        children_coverage_amount: coversChildren ? r2(cov * 0.4) : null,
+        covers_parents: coversParents,
+        parents_count: parentsCount,
+        parents_coverage_amount: coversParents ? r2(cov * 0.3) : null,
+        waiting_period_days: 90,
+        payout_timeline_hours: 48,
+        cause_of_death_covered: 'illness_and_accident',
+        premium_paid_to_date: paidTo,
+        next_premium_due: nextDue,
+        total_premiums_paid: r2(prem * int(3, 18)),
+        status,
+        payment_status: paymentStatus,
+        date_of_death: status === 'claimed' ? date(2026, 8, 15) : null,
+        date_claim_filed: status === 'claimed' ? date(2026, 8, 16) : null,
+        claim_amount: status === 'claimed' ? cov : null,
+        claim_status: status === 'claimed' ? 'paid' : 'none',
+        claim_reference: status === 'claimed' ? `CLM/${policyNo}` : null,
+        claim_paid_at: status === 'claimed' ? ts(2026, 8, 17, 14, 30) : null,
+        claim_paid_amount: status === 'claimed' ? cov : null,
+        claim_payout_hours: status === 'claimed' ? int(12, 48) : null,
+        notes: status === 'claimed'
+          ? 'Claim approved - immediate cash payout within 48 hours to beneficiary for funeral expenses.'
+          : 'Last Respect funeral cover - financial support for funeral and end-of-life expenses, immediate cash payout, no medical records required.',
+        parish_id: m.parish_id,
+        created_by: 4,
+        created_at: ts(startY, startM, startD),
+      });
+
+      // Dependents
+      if (coversSpouse) {
+        insDepId++;
+        insuranceDependents.add({
+          id: insDepId,
+          insurance_id: insuranceId,
+          member_id: m.id,
+          relationship: 'spouse',
+          full_name: `${pick(FIRST)} ${m.last_name}`,
+          dob: date(int(1965, 1998), int(1, 12), int(1, 28)),
+          age: int(25, 60),
+          id_no: String(int(10000000, 39999999)),
+          phone: `2547${int(10000000, 99999999)}`,
+          coverage_amount: r2(cov * 0.8),
+          is_school_going: false,
+          notes: 'Spouse - eligible 18-65',
+          created_at: ts(startY, startM, startD),
+        });
+      }
+      if (coversChildren) {
+        for (let c = 0; c < childrenCount; c++) {
+          insDepId++;
+          const isSchool = chance(0.25);
+          const age = isSchool ? int(20, 25) : int(1, 23);
+          const dobYear = 2026 - age;
+          // 1 month minimum -> ensure dob not future
+          const dobMonth = int(1, 12);
+          const dobDay = int(1, 28);
+          insuranceDependents.add({
+            id: insDepId,
+            insurance_id: insuranceId,
+            member_id: m.id,
+            relationship: 'child',
+            full_name: `${pick(FIRST)} ${m.last_name}`,
+            dob: age < 1 ? date(2026, int(1, 7), int(1, 28)) : date(dobYear, dobMonth, dobDay),
+            age,
+            id_no: age >= 18 ? String(int(10000000, 39999999)) : null,
+            phone: null,
+            coverage_amount: r2(cov * 0.4),
+            is_school_going: isSchool,
+            notes: isSchool ? 'Child up to 25 school-going' : 'Child 1 month - 24 years',
+            created_at: ts(startY, startM, startD),
+          });
+        }
+      }
+      if (coversParents) {
+        for (let p = 0; p < parentsCount; p++) {
+          insDepId++;
+          insuranceDependents.add({
+            id: insDepId,
+            insurance_id: insuranceId,
+            member_id: m.id,
+            relationship: chance(0.5) ? 'parent' : 'parent_in_law',
+            full_name: `${pick(FIRST)} ${pick(LAST)}`,
+            dob: date(int(1940, 1970), int(1, 12), int(1, 28)),
+            age: int(55, 80),
+            id_no: String(int(10000000, 39999999)),
+            phone: `2547${int(10000000, 99999999)}`,
+            coverage_amount: r2(cov * 0.3),
+            is_school_going: false,
+            notes: 'Parent / Parent-in-law covered',
+            created_at: ts(startY, startM, startD),
+          });
+        }
+      }
+
+      // Premium payments (3-8 months)
+      const premMonths = int(3, 9);
+      for (let pm = 0; pm < premMonths; pm++) {
+        const y = 2026;
+        const mo = 9 - pm;
+        if (mo < 1) continue;
+        const d = ts(y, mo, int(3, 26));
+        // create a payment entry linked to insurance
+        const { paymentId: pid, receiptNo } = addPayment({
+          memberId: m.id,
+          amount: prem,
+          date: d,
+          method: chance(0.6) ? 'mpesa' : 'cash',
+          category: 'Last Respect Insurance premium',
+          allocations: [{ type: 'insurance', referenceType: 'last_respect_insurances', referenceId: insuranceId, amount: prem }],
+          recordedBy: 4,
+          notes: `Premium for ${policyNo} - ${y}-${String(mo).padStart(2, '0')}`,
+        });
+        insPremId++;
+        insurancePremiums.add({
+          id: insPremId,
+          insurance_id: insuranceId,
+          member_id: m.id,
+          payment_id: pid,
+          amount: prem,
+          premium_period: `${y}-${String(mo).padStart(2, '0')}`,
+          period_start: date(y, mo, 1),
+          period_end: date(y, mo, 28),
+          paid_at: d,
+          method: chance(0.6) ? 'mpesa' : 'cash',
+          receipt_no: receiptNo,
+          recorded_by: 4,
+          notes: `Monthly premium - funeral cover ${cov}`,
+          created_at: d,
+        });
+      }
+    }
+  } else {
+    console.warn('[seed] skipping insurance policies — no companies found');
+  }
+
   /* ---------------- meetings & attendance ---------------- */
   const meetings = new Table('meetings', [
     'id', 'title', 'meeting_type', 'meeting_date', 'start_time', 'end_time', 'venue', 'parish_id', 'church_id',
@@ -1482,6 +1720,7 @@ async function main() {
       memberContributions, payments, allocations, receipts, savings, shares, shareTx, saccoTx,
       welfareCases, welfarePayments, funeralCases, funeralPayments, weddingCases, weddingPayments,
       projects, projectContributions, applications, loans, schedules, repayments, guarantors, penalties,
+      insurancePolicies, insuranceDependents, insurancePremiums,
       meetings, attendance, notifications, notices, mpesa, auditLogs, memberDocs,
     ]) {
       await flush(client, table);
@@ -1517,8 +1756,9 @@ async function main() {
       'users', 'sacco_accounts', 'member_contributions', 'payments', 'payment_allocations', 'receipts', 'savings',
       'shares', 'share_transactions', 'sacco_transactions', 'welfare_cases', 'welfare_payments', 'funeral_cases',
       'funeral_payments', 'wedding_cases', 'wedding_payments', 'special_projects', 'project_contributions',
-      'loan_applications', 'loans', 'loan_schedules', 'loan_repayments', 'loan_guarantors', 'penalties', 'meetings',
-      'attendance', 'notifications', 'notices', 'mpesa_transactions', 'audit_logs', 'member_documents',
+      'loan_applications', 'loans', 'loan_schedules', 'loan_repayments', 'loan_guarantors', 'penalties',
+      'last_respect_insurances', 'insurance_dependents', 'insurance_premium_payments',
+      'meetings', 'attendance', 'notifications', 'notices', 'mpesa_transactions', 'audit_logs', 'member_documents',
     ]) {
       await setval(client, t);
     }

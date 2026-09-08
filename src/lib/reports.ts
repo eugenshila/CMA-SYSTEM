@@ -644,6 +644,101 @@ export async function systemStats() {
   );
 }
 
+export async function insuranceReport(filters: { parishId?: number | null; companyId?: number | null; status?: string } = {}) {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filters.parishId) {
+    params.push(filters.parishId);
+    where.push(`i.parish_id = $${params.length}`);
+  }
+  if (filters.companyId) {
+    params.push(filters.companyId);
+    where.push(`i.insurance_company_id = $${params.length}`);
+  }
+  if (filters.status) {
+    params.push(filters.status);
+    where.push(`i.status = $${params.length}`);
+  }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const [summary, byStatus, byCompany, byParish, byCoverage, policies, dependents, premiums, claims] = await Promise.all([
+    one<any>(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE status='active')::int AS active,
+              count(*) FILTER (WHERE status='claimed')::int AS claimed,
+              count(*) FILTER (WHERE status='lapsed')::int AS lapsed,
+              COALESCE(SUM(coverage_amount),0) AS total_coverage,
+              COALESCE(SUM(total_premiums_paid),0) AS total_premiums,
+              COALESCE(SUM(premium_amount),0) AS monthly_premium,
+              COALESCE(AVG(coverage_amount),0) AS avg_coverage
+         FROM last_respect_insurances i ${w}`,
+      params,
+    ),
+    query<any>(`SELECT initcap(status) AS label, count(*)::int AS value FROM last_respect_insurances i ${w} GROUP BY 1 ORDER BY 2 DESC`, params),
+    query<any>(
+      `SELECT c.name AS label, count(i.id)::int AS policies, COALESCE(SUM(i.coverage_amount),0) AS coverage, COALESCE(SUM(i.total_premiums_paid),0) AS premiums
+         FROM last_respect_insurances i JOIN insurance_companies c ON c.id = i.insurance_company_id
+         ${w} GROUP BY c.name ORDER BY 3 DESC`,
+      params,
+    ),
+    query<any>(
+      `SELECT COALESCE(p.name,'Unassigned') AS label, count(i.id)::int AS value FROM last_respect_insurances i LEFT JOIN parishes p ON p.id = i.parish_id
+         ${w} GROUP BY 1 ORDER BY 2 DESC`,
+      params,
+    ),
+    query<any>(
+      `SELECT coverage_amount::int AS label, count(*)::int AS value FROM last_respect_insurances i ${w} GROUP BY 1 ORDER BY 1`,
+      params,
+    ),
+    query<any>(
+      `SELECT i.id, i.policy_no, i.coverage_type, i.coverage_amount, i.premium_amount, i.premium_frequency, i.status, i.payment_status,
+              i.beneficiary_name, i.beneficiary_relationship, i.cause_of_death_covered, i.waiting_period_days, i.payout_timeline_hours,
+              i.start_date, i.next_premium_due, i.total_premiums_paid, i.claim_status, i.claim_amount, i.date_of_death, i.date_claim_filed,
+              m.membership_no, m.full_name, m.phone, c.name AS company_name, p.name AS parish_name
+         FROM last_respect_insurances i
+         JOIN members m ON m.id = i.member_id
+         JOIN insurance_companies c ON c.id = i.insurance_company_id
+         LEFT JOIN parishes p ON p.id = i.parish_id
+         ${w}
+         ORDER BY i.created_at DESC`,
+      params,
+    ),
+    query<any>(
+      `SELECT d.relationship, d.full_name, d.age, d.coverage_amount, d.is_school_going, m.membership_no, m.full_name AS principal_name, i.policy_no, c.name AS company_name
+         FROM insurance_dependents d
+         JOIN last_respect_insurances i ON i.id = d.insurance_id
+         JOIN members m ON m.id = d.member_id
+         JOIN insurance_companies c ON c.id = i.insurance_company_id
+         ${w.replace(/i\./g, 'i.')}
+         ORDER BY d.relationship, d.full_name`,
+      params,
+    ),
+    query<any>(
+      `SELECT pp.premium_period, pp.amount, pp.method, pp.paid_at, pp.receipt_no, m.membership_no, m.full_name, i.policy_no, c.name AS company_name
+         FROM insurance_premium_payments pp
+         JOIN last_respect_insurances i ON i.id = pp.insurance_id
+         JOIN members m ON m.id = pp.member_id
+         JOIN insurance_companies c ON c.id = i.insurance_company_id
+         ${w}
+         ORDER BY pp.paid_at DESC LIMIT 500`,
+      params,
+    ),
+    query<any>(
+      `SELECT i.policy_no, i.claim_reference, i.claim_status, i.claim_amount, i.claim_paid_amount, i.claim_payout_hours, i.date_of_death, i.date_claim_filed, i.claim_paid_at,
+              m.membership_no, m.full_name, m.phone, i.beneficiary_name, i.beneficiary_relationship, i.coverage_amount, c.name AS company_name, p.name AS parish_name
+         FROM last_respect_insurances i
+         JOIN members m ON m.id = i.member_id
+         JOIN insurance_companies c ON c.id = i.insurance_company_id
+         LEFT JOIN parishes p ON p.id = i.parish_id
+         WHERE i.status = 'claimed' ${where.length ? `AND ${where.join(' AND ')}` : ''}
+         ORDER BY i.date_claim_filed DESC`,
+      params,
+    ),
+  ]);
+
+  return { summary, byStatus, byCompany, byParish, byCoverage, policies, dependents, premiums, claims };
+}
+
 export async function attendanceReport(opts: { meetingId?: number; memberId?: number; from?: string; to?: string } = {}) {
   const params: any[] = [];
   const clauses: string[] = [];

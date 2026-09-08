@@ -69,7 +69,7 @@ export function TextInput({
   id,
   onChange,
 }: {
-  name: string;
+  name?: string;
   type?: string;
   placeholder?: string;
   defaultValue?: string | number | null;
@@ -118,7 +118,7 @@ export function TextArea({
   className,
   onChange,
 }: {
-  name: string;
+  name?: string;
   placeholder?: string;
   defaultValue?: string | null;
   value?: string | null;
@@ -152,7 +152,7 @@ export function Select({
   disabled,
   onChange,
 }: {
-  name: string;
+  name?: string;
   options: { value: string | number | null; label: string }[];
   defaultValue?: string | number | null;
   value?: string | number | null;

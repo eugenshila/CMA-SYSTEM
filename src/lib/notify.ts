@@ -154,12 +154,13 @@ async function dispatch(
   }
 
   try {
-    if (channel === 'sms' && settings._raw?.sms_api_url) {
-      const res = await fetch(String(settings._raw.sms_api_url), {
+    const raw: any = settings._raw as any;
+    if (channel === 'sms' && raw?.sms_api_url) {
+      const res = await fetch(String(raw.sms_api_url), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${settings._raw.sms_api_key || ''}`,
+          Authorization: `Bearer ${raw.sms_api_key || ''}`,
         },
         body: JSON.stringify({
           to: destination,
@@ -173,12 +174,12 @@ async function dispatch(
         message: res.ok ? 'Accepted by SMS gateway' : `Gateway responded ${res.status}`,
       };
     }
-    if (channel === 'email' && settings._raw?.email_api_url) {
-      const res = await fetch(String(settings._raw.email_api_url), {
+    if (channel === 'email' && raw?.email_api_url) {
+      const res = await fetch(String(raw.email_api_url), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${settings._raw.email_api_key || ''}`,
+          Authorization: `Bearer ${raw.email_api_key || ''}`,
         },
         body: JSON.stringify({
           to: destination,
