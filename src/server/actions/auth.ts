@@ -273,5 +273,3 @@ export async function revokeSessionAction(sessionId: number): Promise<ActionResu
   return { ok: true, message: 'Session ended.' };
 }
 
-export { ROLES };
-export type { z };

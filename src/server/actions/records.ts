@@ -322,4 +322,3 @@ export async function deleteNotificationAction(id: number): Promise<ActionResult
   return { ok: true, message: 'Notification removed.' };
 }
 
-export { notifyRole, num };

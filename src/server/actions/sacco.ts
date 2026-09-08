@@ -326,4 +326,3 @@ export async function declareDividendAction(dividendId: number): Promise<ActionR
   return { ok: true, message: `Dividend declared and ${rows.length} shareholder(s) notified.` };
 }
 
-export { query };

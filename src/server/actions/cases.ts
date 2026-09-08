@@ -355,4 +355,3 @@ export async function deleteProjectCategoryAction(id: number): Promise<ActionRes
   return { ok: true, message: 'Category deactivated.' };
 }
 
-export { query };

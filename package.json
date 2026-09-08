@@ -5,9 +5,9 @@
   "main": "electron/main.cjs",
   "description": "CMA Member Management, Welfare, Contributions, SDP/Sacco, Loans and Shares Management System",
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p ${PORT:-3000}",
+    "dev": "next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "start": "next start -H 0.0.0.0",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:local": "node scripts/local-db.mjs",

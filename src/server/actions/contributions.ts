@@ -274,4 +274,3 @@ export async function remindUnpaidMembersAction(period: string): Promise<ActionR
   return { ok: true, message: `Reminders sent to ${sent} member(s).` };
 }
 
-export { query, periodLabel };

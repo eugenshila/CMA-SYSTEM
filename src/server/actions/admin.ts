@@ -741,4 +741,3 @@ export async function runNightlyJobsAction(): Promise<ActionResult> {
   };
 }
 
-export { allSettings, ORG_TABLES };
