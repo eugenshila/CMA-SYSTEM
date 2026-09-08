@@ -40,7 +40,7 @@ npm run dev:all        # → http://localhost:3000
 Or run the pieces separately:
 
 ```bash
-npm run db:local       # PGlite PostgreSQL on 0.0.0.0:5432 (data in ./.pgdata)
+npm run db:local       # PGlite PostgreSQL on 0.0.0.0:5433 (data in ./.pgdata)
 npm run db:migrate     # apply db/migrations
 npm run db:seed        # reference + demo data (skip with SEED_DEMO_DATA=false)
 npm run dev            # Next.js dev server

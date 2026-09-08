@@ -4,7 +4,7 @@
  */
 export const env = {
   DATABASE_URL:
-    process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/postgres',
+    process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5433/postgres',
   AUTH_SECRET: process.env.AUTH_SECRET || 'cma-dev-secret-change-me-please-32bytes!',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'cma-dev-encryption-key-change-me-64hex00',
   APP_NAME: process.env.APP_NAME || 'CMA Management System',

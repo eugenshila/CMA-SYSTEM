@@ -20,7 +20,8 @@ let shuttingDown = false;
 // The app reads PGPOOL_MAX when building its connection pool — the bundled
 // PGlite server is single-threaded WASM, so one connection avoids the
 // client-side ECONNRESET bursts a wider pool would cause.
-process.env.DATABASE_URL ||= 'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+process.env.DATABASE_URL ||= 'postgresql://postgres:postgres@127.0.0.1:5433/postgres';
+process.env.PGPORT_LOCAL ||= '5433';
 process.env.PGPOOL_MAX ||= '1';
 process.env.PGHOST_LOCAL ||= '0.0.0.0';
 

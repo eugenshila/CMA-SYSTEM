@@ -20,7 +20,7 @@ function loadEnv() {
 }
 loadEnv();
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5433/postgres';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret';
 const secretKey = () => new TextEncoder().encode(AUTH_SECRET);
 

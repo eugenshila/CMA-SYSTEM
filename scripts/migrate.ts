@@ -12,7 +12,7 @@ import pg from 'pg';
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+  'postgresql://postgres:postgres@127.0.0.1:5433/postgres';
 
 const fresh = process.argv.includes('fresh');
 const migrationsDir = path.resolve(process.cwd(), 'db/migrations');

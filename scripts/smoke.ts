@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { verifyPassword } from '@/lib/crypto';
 
-const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5433/postgres';
 
 const CREDS: [string, string][] = [
   ['superadmin@cma.or.ke', 'Cma@Super2026'],

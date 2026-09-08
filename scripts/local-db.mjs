@@ -6,7 +6,7 @@
  * driver and `DATABASE_URL`, so production (Railway PostgreSQL) and local
  * development share exactly the same code path.
  *
- * Usage:  node scripts/local-db.mjs   (defaults: 0.0.0.0:5432, data in .pgdata)
+ * Usage:  node scripts/local-db.mjs   (defaults: 0.0.0.0:5433, data in .pgdata)
  */
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
@@ -14,7 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const host = process.env.PGHOST_LOCAL || '0.0.0.0';
-const port = parseInt(process.env.PGPORT_LOCAL || '5432', 10);
+const port = parseInt(process.env.PGPORT_LOCAL || '5433', 10);
 const maxConnections = parseInt(process.env.PG_MAX_CONNECTIONS || '10', 10);
 const dataDir = process.env.PGLITE_DATA_DIR
   ? path.resolve(process.env.PGLITE_DATA_DIR)

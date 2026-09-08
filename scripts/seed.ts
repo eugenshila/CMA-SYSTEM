@@ -43,15 +43,21 @@ const ts = (y: number, m: number, d: number, hh = 10, mm = 0) => `${date(y, m, d
  * reference content
  * ------------------------------------------------------------------ */
 const FIRST = [
-  'Joseph','Peter','John','Patrick','Anthony','Charles','David','Michael','Francis','Stephen','Paul','James','Daniel','Vincent','Bernard',
-  'Clement','Lawrence','Raphael','Gabriel','Emmanuel','Nicholas','George','Andrew','Simon','Thomas','Martin','Silas','Elias','Moses','Samuel',
-  'Alex','Brian','Collins','Dennis','Edwin','Felix','Gerald','Henry','Ian','Jackson','Kevin','Leonard','Morgan','Norman','Oliver',
-  'Philip','Quincy','Robert','Stanley','Timothy','Victor','Walter','Xavier','Zacharia','Amos','Benson','Cyrus','Dominic','Eliud','Fredrick',
+  'James','Michael','Robert','John','David','William','Richard','Thomas','Charles','Christopher',
+  'Daniel','Matthew','Anthony','Mark','Donald','Steven','Paul','Andrew','Joshua','Kenneth',
+  'Kevin','Brian','George','Edward','Ronald','Timothy','Jason','Jeffrey','Ryan','Jacob',
+  'Gary','Nicholas','Eric','Jonathan','Stephen','Larry','Justin','Scott','Brandon','Benjamin',
+  'Samuel','Gregory','Alexander','Frank','Patrick','Raymond','Jack','Dennis','Jerry','Tyler',
+  'Aaron','Jose','Adam','Henry','Nathan','Douglas','Peter','Kyle','Ethan','Walter',
+  'Gabriel','Carl','Arthur','Roger','Gerald','Keith','Jeremy','Terry','Christian','Sean',
 ];
 const LAST = [
-  'Mwangi','Kamau','Otieno','Odhiambo','Kipchoge','Mutua','Njoroge','Waithaka','Kimani','Githinji','Ochieng','Onyango','Kibet','Rotich',
-  'Macharia','Njenga','Karimi','Muriuki','Githaiga','Ndungu','Kariuki','Waweru','Mbugua','Ngugi','Omondi','Owino','Chebet','Kiplagat',
-  'Mwenda','Karanja','Gichuru','Nderitu','Sifuna','Barasa','Wekesa','Masinde','Simiyu','Lagat','Korir','Too','Nyang\'au','Abwao','Ombasa','Ouma',
+  'Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez',
+  'Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas','Taylor','Moore','Jackson','Martin',
+  'Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Ramirez','Lewis','Robinson',
+  'Walker','Young','Allen','King','Wright','Scott','Torres','Nguyen','Hill','Flores',
+  'Green','Adams','Nelson','Baker','Hall','Rivera','Campbell','Mitchell','Carter','Roberts',
+  'Gomez','Phillips','Evans','Turner','Diaz','Parker','Cruz','Edwards','Collins','Reyes',
 ];
 const OCCUPATIONS = [
   'Teacher','Civil Engineer','Farmer','Businessman','Accountant','Nurse Practitioner','Electrician','Plumber','Bank Officer','Advocate',
