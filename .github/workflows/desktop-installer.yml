@@ -6,6 +6,12 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# Creating / updating a GitHub Release needs write access to the repo.
+# Declaring this explicitly also covers orgs that set GITHUB_TOKEN to
+# read-only by default (which would make `gh release create` fail).
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build (${{ matrix.label }})
@@ -29,9 +35,9 @@ jobs:
               release/*.zip
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -55,7 +61,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cma-system-${{ matrix.label }}
           path: ${{ matrix.asset_glob }}
@@ -66,8 +72,39 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_GLOB: ${{ matrix.asset_glob }}
         run: |
-          set -e
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
-            || gh release create "${GITHUB_REF_NAME}" --generate-notes
-          gh release upload "${GITHUB_REF_NAME}" "${{ matrix.asset_glob }}" --clobber
+          set -euo pipefail
+
+          # Three matrix jobs race to create the same tag release.
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" --generate-notes || true
+          fi
+          for _ in {1..12}; do
+            gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 && break
+            sleep 5
+          done
+          gh release view "${GITHUB_REF_NAME}" >/dev/null
+
+          # Expand newline-separated globs in bash so:
+          #  - filenames with spaces (productName "CMA System") stay intact
+          #  - macOS's multiline dmg+zip glob is not passed to `gh` as one
+          #    quoted argument (filepath.Glob would then match nothing)
+          shopt -s nullglob
+          assets=()
+          while IFS= read -r pattern || [[ -n "${pattern:-}" ]]; do
+            [[ -z "${pattern}" ]] && continue
+            for f in ${pattern}; do
+              assets+=("$f")
+            done
+          done <<< "${ASSET_GLOB}"
+
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No installer files matched:" >&2
+            printf '%s\n' "${ASSET_GLOB}" >&2
+            ls -la release || true
+            exit 1
+          fi
+
+          printf 'Uploading %s\n' "${assets[@]}"
+          gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
