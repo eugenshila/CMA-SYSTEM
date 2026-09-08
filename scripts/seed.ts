@@ -64,8 +64,8 @@ const OCCUPATIONS = [
   'Driver','Carpenter','Software Developer','Pharmacist','Police Officer','Shop Keeper','Mechanic','Architect','Lecturer','Security Officer',
   'Mason','Warehouse Supervisor','Sales Manager','Agronomist','Doctor','Clerk','Tailor','Boda Boda Rider','Contractor','Catechist',
 ];
-const AREAS = ['Kamakis','Njiru','Ruai','Mihango','Utawala','Kayole','Pipeline','Githurai','Kahawa','Zimmerman','Roysambu','Kasarani','Ruiru','Juja'];
-const SCC = ['St. Joseph SCC','Holy Family SCC','St. Monica SCC','Good Shepherd SCC','St. Peter SCC','St. Anthony SCC','Mater Misericordiae SCC','St. Michael SCC'];
+const AREAS = ['Kahawa West','Marengeta','Soweto','Kahawa Sukari','Githurai','Zimmerman','Roysambu','Kasarani','Njiru','Ruai','Utawala','Kayole'];
+const SCC = ['St Joseph Mukasa SCC','St Peter and Paul SCC','St Francis of Asisi SCC','Good Shepherd SCC','St Joseph SCC','St Anthony SCC','Mater Misericordiae SCC','St Michael SCC'];
 
 /* ------------------------------------------------------------------ *
  * helpers for batched inserts
@@ -192,30 +192,30 @@ async function main() {
   const countryId = (await client.query("SELECT id FROM countries WHERE code='KE'")).rows[0]?.id ?? 1;
 
   const dioceses = new Table('dioceses', ['id', 'country_id', 'code', 'name', 'type', 'bishop']);
-  dioceses.add({ id: 1, country_id: countryId, code: 'ADN', name: 'Archdiocese of Nairobi', type: 'archdiocese', bishop: 'Most Rev. Philip Anyolo' });
-  dioceses.add({ id: 2, country_id: countryId, code: 'MUR', name: 'Diocese of Muranga', type: 'diocese', bishop: 'Most Rev. James Wainaina' });
+  dioceses.add({ id: 1, country_id: countryId, code: 'ADN', name: 'Archdiocese of Nairobi', type: 'archdiocese', bishop: 'Most Rev. John Anderson' });
+  dioceses.add({ id: 2, country_id: countryId, code: 'MUR', name: 'Diocese of Muranga', type: 'diocese', bishop: 'Most Rev. Michael Smith' });
 
   const deaneries = new Table('deaneries', ['id', 'diocese_id', 'code', 'name']);
-  deaneries.add({ id: 1, diocese_id: 1, code: 'DEAN-KMB', name: 'Kamakis Deanery' });
-  deaneries.add({ id: 2, diocese_id: 1, code: 'DEAN-NBI', name: 'Nairobi Central Deanery' });
+  deaneries.add({ id: 1, diocese_id: 1, code: 'DEAN-KW', name: 'Kahawa West Deanery' });
 
   const parishes = new Table('parishes', [
     'id', 'deanery_id', 'diocese_id', 'code', 'name', 'parish_priest', 'cma_chaplain', 'address', 'phone', 'email',
   ]);
-  parishes.add({ id: 1, deanery_id: 1, diocese_id: 1, code: 'STM', name: 'St. Monica Parish, Kamakis', parish_priest: 'Fr. Boniface Wambugu', cma_chaplain: 'Fr. John Otieno', address: 'P.O. Box 1234-00100, Kamakis', phone: '+254712000001', email: 'stmonica@cma.or.ke' });
-  parishes.add({ id: 2, deanery_id: 1, diocese_id: 1, code: 'SPC', name: 'St. Peter Claver Parish, Ruai', parish_priest: 'Fr. Anthony Kariuki', cma_chaplain: 'Fr. Peter Njuguna', address: 'P.O. Box 456-00517, Ruai', phone: '+254712000002', email: 'stpeterclaver@cma.or.ke' });
-  parishes.add({ id: 3, deanery_id: 2, diocese_id: 1, code: 'HFN', name: 'Holy Family Parish, Nyeri Road', parish_priest: 'Fr. Charles Mbugua', cma_chaplain: 'Fr. Simon Ndungu', address: 'P.O. Box 789-00100, Nairobi', phone: '+254712000003', email: 'holyfamily@cma.or.ke' });
+  // Main parish + 2 sub-parishes as requested
+  parishes.add({ id: 1, deanery_id: 1, diocese_id: 1, code: 'SJMKW', name: 'St Joseph Mukasa Kahawa West', parish_priest: 'Fr. Thomas Brown', cma_chaplain: 'Fr. David Wilson', address: 'P.O. Box 1234-00100, Kahawa West', phone: '+254712000001', email: 'stjosephmukasa@cma.or.ke' });
+  parishes.add({ id: 2, deanery_id: 1, diocese_id: 1, code: 'SPPM', name: 'St Peter and Paul Marengeta', parish_priest: 'Fr. Robert Johnson', cma_chaplain: 'Fr. William Davis', address: 'P.O. Box 456-00517, Marengeta', phone: '+254712000002', email: 'stpeterpaul.marengeta@cma.or.ke' });
+  parishes.add({ id: 3, deanery_id: 1, diocese_id: 1, code: 'SFAS', name: 'St Francis of Asisi Soweto', parish_priest: 'Fr. Richard Garcia', cma_chaplain: 'Fr. Joseph Martinez', address: 'P.O. Box 789-00100, Soweto', phone: '+254712000003', email: 'stfrancis.soweto@cma.or.ke' });
 
   const churches = new Table('churches', ['id', 'parish_id', 'code', 'name', 'type', 'location']);
   const churchList = [
-    { id: 1, parish_id: 1, code: 'STM-MAIN', name: 'St. Monica Parish Church', type: 'parish_church', location: 'Kamakis' },
-    { id: 2, parish_id: 1, code: 'STM-NJR', name: 'St. Joseph Njiru Outstation', type: 'outstation', location: 'Njiru' },
-    { id: 3, parish_id: 1, code: 'STM-RUA', name: 'Christ the King Ruai Outstation', type: 'outstation', location: 'Ruai' },
-    { id: 4, parish_id: 1, code: 'STM-MIH', name: 'St. Monica Mihango Chapel', type: 'chapel', location: 'Mihango' },
-    { id: 5, parish_id: 2, code: 'SPC-MAIN', name: 'St. Peter Claver Parish Church', type: 'parish_church', location: 'Ruai' },
-    { id: 6, parish_id: 2, code: 'SPC-UTA', name: 'St. Paul Utawala Outstation', type: 'outstation', location: 'Utawala' },
-    { id: 7, parish_id: 3, code: 'HFN-MAIN', name: 'Holy Family Parish Church', type: 'parish_church', location: 'Nyeri Road' },
-    { id: 8, parish_id: 3, code: 'HFN-KAH', name: 'St. Anthony Kahawa Outstation', type: 'outstation', location: 'Kahawa' },
+    { id: 1, parish_id: 1, code: 'SJMKW-MAIN', name: 'St Joseph Mukasa Kahawa West Main Church', type: 'parish_church', location: 'Kahawa West' },
+    { id: 2, parish_id: 1, code: 'SJMKW-KWS', name: 'St Joseph Mukasa Kahawa Sukari Outstation', type: 'outstation', location: 'Kahawa Sukari' },
+    { id: 3, parish_id: 1, code: 'SJMKW-GIT', name: 'Christ the King Githurai Outstation', type: 'outstation', location: 'Githurai' },
+    { id: 4, parish_id: 1, code: 'SJMKW-ZIM', name: 'St Joseph Mukasa Zimmerman Chapel', type: 'chapel', location: 'Zimmerman' },
+    { id: 5, parish_id: 2, code: 'SPPM-MAIN', name: 'St Peter and Paul Marengeta Main Church', type: 'parish_church', location: 'Marengeta' },
+    { id: 6, parish_id: 2, code: 'SPPM-UTA', name: 'St Peter and Paul Utawala Outstation', type: 'outstation', location: 'Marengeta' },
+    { id: 7, parish_id: 3, code: 'SFAS-MAIN', name: 'St Francis of Asisi Soweto Main Church', type: 'parish_church', location: 'Soweto' },
+    { id: 8, parish_id: 3, code: 'SFAS-KAH', name: 'St Francis of Asisi Kahawa West Outstation', type: 'outstation', location: 'Kahawa West' },
   ];
   churchList.forEach((c) => churches.add(c));
 
@@ -253,13 +253,13 @@ async function main() {
     const middle = chance(0.55) ? pick(FIRST) : '';
     const last = LAST[(i * 7) % LAST.length];
     const fullName = [first, middle, last].filter(Boolean).join(' ');
-    // 52 members in St. Monica (parish 1), the rest spread across the others
+    // 52 members in St Joseph Mukasa Kahawa West (parish 1), rest spread across sub-parishes
     const parishId = i <= 52 ? 1 : i <= 58 ? 2 : 3;
     const parishChurches = churchList.filter((c) => c.parish_id === parishId);
     const church = parishChurches[i % parishChurches.length];
     const churchSccs = sccRows.filter((s) => s.church_id === church.id);
     const scc = churchSccs.length ? churchSccs[i % churchSccs.length] : sccRows[i % sccRows.length];
-    const prefix = { 1: 'STM', 2: 'SPC', 3: 'HFN' }[parishId] as string;
+    const prefix = { 1: 'SJMKW', 2: 'SPPM', 3: 'SFAS' }[parishId] as string;
     const membershipNo = `CMA/${prefix}/${String(i).padStart(4, '0')}`;
     const dobYear = int(1962, 2001);
     const dob = date(dobYear, int(1, 12), int(1, 28));
@@ -321,14 +321,14 @@ async function main() {
   ]);
 
   const staff = [
-    { id: 1, role: 'super_admin', name: 'Eng. Peter Ndegwa', email: 'superadmin@cma.or.ke', phone: '254700000001', login: 'SUPER001', pw: 'Cma@Super2026', parish: null },
-    { id: 2, role: 'admin', name: 'Mr. Joseph Kamau', email: 'admin@stmonica.or.ke', phone: '254700000002', login: 'ADMIN001', pw: 'Cma@Admin2026', parish: 1 },
-    { id: 3, role: 'chairman', name: 'Mr. Patrick Otieno', email: 'chairman@stmonica.or.ke', phone: '254700000003', login: 'CHAIR001', pw: 'Cma@Chair2026', parish: 1 },
-    { id: 4, role: 'treasurer', name: 'Mr. Charles Mwangi', email: 'treasurer@stmonica.or.ke', phone: '254700000004', login: 'TRES001', pw: 'Cma@Treas2026', parish: 1 },
-    { id: 5, role: 'secretary', name: 'Mr. Michael Kariuki', email: 'secretary@stmonica.or.ke', phone: '254700000005', login: 'SEC001', pw: 'Cma@Sec2026', parish: 1 },
-    { id: 6, role: 'sacco_officer', name: 'Mr. Vincent Ndungu', email: 'sacco@stmonica.or.ke', phone: '254700000006', login: 'SDP001', pw: 'Cma@Sacco2026', parish: 1 },
-    { id: 7, role: 'loan_committee', name: 'Mr. Francis Waweru', email: 'loans@stmonica.or.ke', phone: '254700000007', login: 'LOAN001', pw: 'Cma@Loan2026', parish: 1 },
-    { id: 8, role: 'auditor', name: 'Mr. Bernard Ochieng', email: 'auditor@cma.or.ke', phone: '254700000008', login: 'AUD001', pw: 'Cma@Audit2026', parish: null },
+    { id: 1, role: 'super_admin', name: 'Eng. James Anderson', email: 'superadmin@cma.or.ke', phone: '254700000001', login: 'SUPER001', pw: 'Cma@Super2026', parish: null },
+    { id: 2, role: 'admin', name: 'Mr. Robert Johnson', email: 'admin@stjosephmukasa.or.ke', phone: '254700000002', login: 'ADMIN001', pw: 'Cma@Admin2026', parish: 1 },
+    { id: 3, role: 'chairman', name: 'Mr. Michael Smith', email: 'chairman@stjosephmukasa.or.ke', phone: '254700000003', login: 'CHAIR001', pw: 'Cma@Chair2026', parish: 1 },
+    { id: 4, role: 'treasurer', name: 'Mr. David Williams', email: 'treasurer@stjosephmukasa.or.ke', phone: '254700000004', login: 'TRES001', pw: 'Cma@Treas2026', parish: 1 },
+    { id: 5, role: 'secretary', name: 'Mr. William Brown', email: 'secretary@stjosephmukasa.or.ke', phone: '254700000005', login: 'SEC001', pw: 'Cma@Sec2026', parish: 1 },
+    { id: 6, role: 'sacco_officer', name: 'Mr. Richard Davis', email: 'sacco@stjosephmukasa.or.ke', phone: '254700000006', login: 'SDP001', pw: 'Cma@Sacco2026', parish: 1 },
+    { id: 7, role: 'loan_committee', name: 'Mr. Thomas Miller', email: 'loans@stjosephmukasa.or.ke', phone: '254700000007', login: 'LOAN001', pw: 'Cma@Loan2026', parish: 1 },
+    { id: 8, role: 'auditor', name: 'Mr. Christopher Wilson', email: 'auditor@cma.or.ke', phone: '254700000008', login: 'AUD001', pw: 'Cma@Audit2026', parish: null },
   ];
   staff.forEach((s) =>
     users.add({
@@ -532,7 +532,7 @@ async function main() {
       payment_id: paymentId,
       member_id: opts.memberId,
       organisation: 'Catholic Men Association (CMA)',
-      parish_name: { 1: 'St. Monica Parish, Kamakis', 2: 'St. Peter Claver Parish, Ruai', 3: 'Holy Family Parish, Nyeri Road' }[member.parish_id],
+      parish_name: { 1: 'St Joseph Mukasa Kahawa West', 2: 'St Peter and Paul Marengeta', 3: 'St Francis of Asisi Soweto' }[member.parish_id],
       category: opts.category,
       description: opts.allocations
         .map((a) => `${a.type.replace(/_/g, ' ')}${a.period ? ` (${a.period})` : ''}: KSh ${r2(a.amount).toLocaleString()}`)
@@ -776,7 +776,7 @@ async function main() {
     },
     {
       id: 3, case_no: 'WEL/2026/0003', member: 34, category: 'sickness', nature: 'Malaria and typhoid — outpatient treatment and medication',
-      hospital: 'Kamakis Catholic Hospital', ward: null, admission: date(2026, 8, 20), target: 25000, per: 200,
+      hospital: 'St. Joseph Mukasa Health Centre, Kahawa West', ward: null, admission: date(2026, 8, 20), target: 25000, per: 200,
       opening: date(2026, 8, 21), deadline: date(2026, 9, 20), status: 'open', disbursed: 0, disbursedAt: null,
     },
   ];
@@ -809,8 +809,8 @@ async function main() {
   });
 
   const funeralData = [
-    { id: 1, case_no: 'FUN/2026/0001', member: 12, deceased: 'Mama Teresia Wanjiru Kamau', relationship: 'spouse', dod: date(2026, 5, 4), funeral: date(2026, 5, 9), burial: 'Kiambu — family home', mortuary: 'Lee Funeral Home', per: 1000, deadline: date(2026, 5, 8), status: 'disbursed', disbursed: 46000 },
-    { id: 2, case_no: 'FUN/2026/0002', member: 28, deceased: 'Mzee Patrick Odhiambo', relationship: 'parent', dod: date(2026, 8, 18), funeral: date(2026, 8, 24), burial: 'Kisumu — Nyando', mortuary: 'Nairobi Mortuary', per: 800, deadline: date(2026, 8, 23), status: 'open', disbursed: 0 },
+    { id: 1, case_no: 'FUN/2026/0001', member: 12, deceased: 'Margaret Anderson Smith', relationship: 'spouse', dod: date(2026, 5, 4), funeral: date(2026, 5, 9), burial: 'Greenwood Memorial Park', mortuary: 'Lee Funeral Home', per: 1000, deadline: date(2026, 5, 8), status: 'disbursed', disbursed: 46000 },
+    { id: 2, case_no: 'FUN/2026/0002', member: 28, deceased: 'Robert Johnson Sr.', relationship: 'parent', dod: date(2026, 8, 18), funeral: date(2026, 8, 24), burial: 'Oak Hill Cemetery', mortuary: 'City Mortuary', per: 800, deadline: date(2026, 8, 23), status: 'open', disbursed: 0 },
   ];
   let funeralCollected: Record<number, number> = { 1: 0, 2: 0 };
   let fpId = 0;
@@ -842,8 +842,8 @@ async function main() {
   });
 
   const weddingData = [
-    { id: 1, case_no: 'WED/2026/0001', member: 16, spouse: 'Grace Achieng', wedding: date(2026, 7, 18), venue: 'St. Monica Parish Church', per: 500, target: 30000, deadline: date(2026, 7, 15), status: 'disbursed', disbursed: 24000 },
-    { id: 2, case_no: 'WED/2026/0002', member: 41, spouse: 'Mary Wambui', wedding: date(2026, 10, 10), venue: 'St. Joseph Njiru Outstation', per: 500, target: 30000, deadline: date(2026, 10, 5), status: 'open', disbursed: 0 },
+    { id: 1, case_no: 'WED/2026/0001', member: 16, spouse: 'Emily Johnson', wedding: date(2026, 7, 18), venue: 'St Joseph Mukasa Kahawa West Main Church', per: 500, target: 30000, deadline: date(2026, 7, 15), status: 'disbursed', disbursed: 24000 },
+    { id: 2, case_no: 'WED/2026/0002', member: 41, spouse: 'Sarah Williams', wedding: date(2026, 10, 10), venue: 'St Peter and Paul Marengeta Main Church', per: 500, target: 30000, deadline: date(2026, 10, 5), status: 'open', disbursed: 0 },
   ];
   let weddingCollected: Record<number, number> = { 1: 0, 2: 0 };
   let wedpId = 0;
@@ -876,7 +876,7 @@ async function main() {
 
   const projectData = [
     { id: 1, no: 'PRJ/2026/0001', name: 'CMA Annual Day & Fundraiser', category: 'annual_function', desc: 'Annual CMA day with a fundraiser for the association’s activities.', target: 250000, per: 1000, start: date(2026, 3, 1), deadline: date(2026, 5, 30), event: date(2026, 6, 14), status: 'completed', disbursed: 178000 },
-    { id: 2, no: 'PRJ/2026/0002', name: 'Parish Church Hall Roofing', category: 'parish_project', desc: 'Contribution towards roofing of the new parish hall.', target: 500000, per: 2000, start: date(2026, 5, 1), deadline: date(2026, 10, 31), event: null, status: 'open', disbursed: 0 },
+    { id: 2, no: 'PRJ/2026/0002', name: 'St Joseph Mukasa Kahawa West Parish Hall Roofing', category: 'parish_project', desc: 'Contribution towards roofing of the new St Joseph Mukasa Kahawa West parish hall.', target: 500000, per: 2000, start: date(2026, 5, 1), deadline: date(2026, 10, 31), event: null, status: 'open', disbursed: 0 },
     { id: 3, no: 'PRJ/2026/0003', name: 'Diocesan Pilgrimage to Subukia', category: 'pilgrimage', desc: 'Men’s pilgrimage to the Subukia Marian Shrine.', target: 120000, per: 3000, start: date(2026, 7, 1), deadline: date(2026, 9, 15), event: date(2026, 9, 26), status: 'open', disbursed: 0 },
     { id: 4, no: 'PRJ/2025/0004', name: 'CMA Uniforms & Regalia', category: 'uniform', desc: 'Purchase of CMA uniforms, berets and badges for members.', target: 180000, per: 3500, start: date(2025, 9, 1), deadline: date(2025, 12, 20), event: null, status: 'completed', disbursed: 165000 },
   ];
@@ -993,7 +993,7 @@ async function main() {
     { app: 1, no: 'LA/2026/0001', member: 6, type: 'SCH', amount: 80000, months: 10, purpose: 'School fees for two children (Term 3)', status: 'disbursed', applied: ts(2026, 6, 3), loanNo: 'LN/2026/0001', disbursed: ts(2026, 6, 18), guarantors: [7, 8], firstDue: new Date(2026, 6, 20) },
     { app: 2, no: 'LA/2026/0002', member: 11, type: 'DEV', amount: 350000, months: 36, purpose: 'Completion of a rental unit at Ruiru', status: 'disbursed', applied: ts(2026, 4, 12), loanNo: 'LN/2026/0002', disbursed: ts(2026, 5, 6), guarantors: [13, 14, 15], firstDue: new Date(2026, 5, 10) },
     { app: 3, no: 'LA/2026/0003', member: 19, type: 'EMG', amount: 30000, months: 5, purpose: 'Emergency medical bills for a dependant', status: 'disbursed', applied: ts(2026, 7, 8), loanNo: 'LN/2026/0003', disbursed: ts(2026, 7, 15), guarantors: [20], firstDue: new Date(2026, 7, 20) },
-    { app: 4, no: 'LA/2025/0004', member: 24, type: 'BIZ', amount: 250000, months: 24, purpose: 'Stock for a hardware shop in Kamakis', status: 'disbursed', applied: ts(2025, 10, 2), loanNo: 'LN/2025/0004', disbursed: ts(2025, 11, 4), guarantors: [25, 26, 27], firstDue: new Date(2025, 11, 10) },
+    { app: 4, no: 'LA/2025/0004', member: 24, type: 'BIZ', amount: 250000, months: 24, purpose: 'Stock for a hardware shop in Kahawa West', status: 'disbursed', applied: ts(2025, 10, 2), loanNo: 'LN/2025/0004', disbursed: ts(2025, 11, 4), guarantors: [25, 26, 27], firstDue: new Date(2025, 11, 10) },
     { app: 5, no: 'LA/2025/0005', member: 31, type: 'AST', amount: 120000, months: 18, purpose: 'Purchase of a water tank and a motorised pump', status: 'disbursed', applied: ts(2025, 8, 14), loanNo: 'LN/2025/0005', disbursed: ts(2025, 9, 2), guarantors: [32, 33], firstDue: new Date(2025, 9, 10) },
     { app: 6, no: 'LA/2026/0006', member: 37, type: 'MED', amount: 60000, months: 12, purpose: 'Surgery for a chronic condition', status: 'committee_review', applied: ts(2026, 8, 22), loanNo: null, disbursed: null, guarantors: [38, 39], firstDue: null },
     { app: 7, no: 'LA/2026/0007', member: 43, type: 'SHT', amount: 25000, months: 3, purpose: 'Salary bridging — school requirements', status: 'guarantor_pending', applied: ts(2026, 8, 28), loanNo: null, disbursed: null, guarantors: [44], firstDue: null },
@@ -1261,11 +1261,11 @@ async function main() {
       meeting_date: date(d.getFullYear(), d.getMonth() + 1, d.getDate()),
       start_time: '10:00:00',
       end_time: '12:30:00',
-      venue: type === 'general_assembly' ? 'Parish Pastoral Hall' : 'St. Monica Parish Church Hall',
+      venue: type === 'general_assembly' ? 'St Joseph Mukasa Kahawa West Pastoral Hall' : 'St Joseph Mukasa Kahawa West Main Church Hall',
       parish_id: 1,
       church_id: 1,
-      chairperson: 'Mr. Patrick Otieno',
-      secretary: 'Mr. Michael Kariuki',
+      chairperson: 'Mr. Michael Smith',
+      secretary: 'Mr. William Brown',
       agenda: '1. Opening prayer\n2. Roll call\n3. Minutes of the previous meeting\n4. Financial report\n5. Welfare & bereavement matters\n6. SDP/Sacco report\n7. Projects\n8. AOB\n9. Closing prayer',
       attendance_open: false,
       status: 'completed',
@@ -1340,7 +1340,7 @@ async function main() {
       created_at: ts(2026, 8, 15),
     });
   }
-  addNotif({ title: 'New welfare case: WEL/2026/0003', body: 'A member has been admitted at Kamakis Catholic Hospital. A contribution of KSh 200 per member is requested by 20 September 2026.', category: 'welfare', priority: 'high', channels: ['in_system', 'sms'], link: '/welfare/3', created_at: ts(2026, 8, 21), member_id: 2 });
+  addNotif({ title: 'New welfare case: WEL/2026/0003', body: 'A member has been admitted at St Joseph Mukasa Health Centre, Kahawa West. A contribution of KSh 200 per member is requested by 20 September 2026.', category: 'welfare', priority: 'high', channels: ['in_system', 'sms'], link: '/welfare/3', created_at: ts(2026, 8, 21), member_id: 2 });
   addNotif({ title: 'Funeral contribution: FUN/2026/0002', body: 'Condolences to a member on the loss of his father. KSh 800 per member is due before the funeral on 24 August 2026.', category: 'funeral', priority: 'urgent', channels: ['in_system', 'sms'], link: '/funerals/2', created_at: ts(2026, 8, 18), member_id: 3 });
   addNotif({ title: 'Loan application received', body: 'Your loan application LA/2026/0006 has been forwarded to the loan committee for review.', category: 'loan', priority: 'normal', channels: ['in_system'], link: '/loans', created_at: ts(2026, 8, 23), member_id: 37 });
   addNotif({ title: 'Guarantee request', body: 'You have been asked to guarantee a loan of KSh 12,500. Please accept or decline the request.', category: 'loan', priority: 'high', channels: ['in_system', 'sms'], link: '/loans/guarantor-requests', created_at: ts(2026, 8, 28), member_id: 44 });
@@ -1408,13 +1408,13 @@ async function main() {
     auditId++;
     auditLogs.add({ id: auditId, ...a });
   };
-  addAudit({ user_id: 1, user_name: 'Eng. Peter Ndegwa', action: 'system.initialised', entity_type: 'system', entity_id: null, entity_label: 'CMA System', description: 'System initialised for St. Monica Parish, Kamakis', old_values: null, new_values: null, ip_address: '41.90.112.14', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 1, 4, 8, 0) });
-  addAudit({ user_id: 2, user_name: 'Mr. Joseph Kamau', action: 'member.created', entity_type: 'member', entity_id: 64, entity_label: 'CMA/STM/0064', description: 'Registered new CMA member', old_values: null, new_values: { membership_no: 'CMA/STM/0064' }, ip_address: '41.90.112.20', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 2, 12, 11, 20) });
-  addAudit({ user_id: 4, user_name: 'Mr. Charles Mwangi', action: 'payment.recorded', entity_type: 'payment', entity_id: 1, entity_label: 'CMA/202509/0001', description: 'Recorded monthly contribution payment', old_values: null, new_values: { amount: 200, method: 'mpesa' }, ip_address: '41.90.112.31', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2025, 9, 5, 15, 10) });
-  addAudit({ user_id: 7, user_name: 'Mr. Francis Waweru', action: 'loan.status_approved', entity_type: 'loan_application', entity_id: 3, entity_label: 'LA/2026/0003', description: 'Loan committee approved KSh 30,000 emergency loan', old_values: { status: 'committee_review' }, new_values: { status: 'approved' }, ip_address: '41.90.112.44', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 7, 14, 16, 40) });
-  addAudit({ user_id: 6, user_name: 'Mr. Vincent Ndungu', action: 'loan.disbursed', entity_type: 'loan', entity_id: 3, entity_label: 'LN/2026/0003', description: 'Disbursed KSh 30,000 to member', old_values: null, new_values: { principal: 30000 }, ip_address: '41.90.112.50', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 7, 15, 10, 5) });
-  addAudit({ user_id: 5, user_name: 'Mr. Michael Kariuki', action: 'member.status_updated', entity_type: 'member', entity_id: 61, entity_label: 'CMA/STM/0061', description: 'Membership status changed to suspended', old_values: { membership_status: 'active' }, new_values: { membership_status: 'suspended' }, ip_address: '41.90.112.61', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 6, 20, 9, 30) });
-  addAudit({ user_id: 8, user_name: 'Mr. Bernard Ochieng', action: 'report.exported', entity_type: 'report', entity_id: null, entity_label: 'Loan portfolio', description: 'Exported loan portfolio report to Excel', old_values: null, new_values: null, ip_address: '41.90.112.72', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 8, 30, 14, 0) });
+  addAudit({ user_id: 1, user_name: 'Eng. James Anderson', action: 'system.initialised', entity_type: 'system', entity_id: null, entity_label: 'CMA System', description: 'System initialised for St Joseph Mukasa Kahawa West', old_values: null, new_values: null, ip_address: '41.90.112.14', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 1, 4, 8, 0) });
+  addAudit({ user_id: 2, user_name: 'Mr. Robert Johnson', action: 'member.created', entity_type: 'member', entity_id: 64, entity_label: 'CMA/SJMKW/0064', description: 'Registered new CMA member', old_values: null, new_values: { membership_no: 'CMA/SJMKW/0064' }, ip_address: '41.90.112.20', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 2, 12, 11, 20) });
+  addAudit({ user_id: 4, user_name: 'Mr. David Williams', action: 'payment.recorded', entity_type: 'payment', entity_id: 1, entity_label: 'CMA/202509/0001', description: 'Recorded monthly contribution payment', old_values: null, new_values: { amount: 200, method: 'mpesa' }, ip_address: '41.90.112.31', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2025, 9, 5, 15, 10) });
+  addAudit({ user_id: 7, user_name: 'Mr. Thomas Miller', action: 'loan.status_approved', entity_type: 'loan_application', entity_id: 3, entity_label: 'LA/2026/0003', description: 'Loan committee approved KSh 30,000 emergency loan', old_values: { status: 'committee_review' }, new_values: { status: 'approved' }, ip_address: '41.90.112.44', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 7, 14, 16, 40) });
+  addAudit({ user_id: 6, user_name: 'Mr. Richard Davis', action: 'loan.disbursed', entity_type: 'loan', entity_id: 3, entity_label: 'LN/2026/0003', description: 'Disbursed KSh 30,000 to member', old_values: null, new_values: { principal: 30000 }, ip_address: '41.90.112.50', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 7, 15, 10, 5) });
+  addAudit({ user_id: 5, user_name: 'Mr. William Brown', action: 'member.status_updated', entity_type: 'member', entity_id: 61, entity_label: 'CMA/SJMKW/0061', description: 'Membership status changed to suspended', old_values: { membership_status: 'active' }, new_values: { membership_status: 'suspended' }, ip_address: '41.90.112.61', user_agent: 'Mozilla/5.0', severity: 'warning', created_at: ts(2026, 6, 20, 9, 30) });
+  addAudit({ user_id: 8, user_name: 'Mr. Christopher Wilson', action: 'report.exported', entity_type: 'report', entity_id: null, entity_label: 'Loan portfolio', description: 'Exported loan portfolio report to Excel', old_values: null, new_values: null, ip_address: '41.90.112.72', user_agent: 'Mozilla/5.0', severity: 'info', created_at: ts(2026, 8, 30, 14, 0) });
 
   /* ---------------- member documents (placeholder PDF files) ---------------- */
   console.log('[seed] generating member document files…');
@@ -1544,8 +1544,8 @@ async function main() {
     const u = users.rows.find((x) => x.id === s.id)!;
     console.log(`  ${s.role.padEnd(14)} login: ${String(u.login_id).padEnd(13)} email: ${String(u.email).padEnd(26)} phone: ${u.phone}  [${s.pw}]`);
   });
-  console.log(`  member         ${memberRows[5].phone} (CMA/STM/0006)  [Member@2026]`);
-  console.log(`  member         ${memberRows[8].phone} (CMA/STM/0009)  [Member@2026]`);
+  console.log(`  member         ${memberRows[5].phone} (CMA/SJMKW/0006)  [Member@2026]`);
+  console.log(`  member         ${memberRows[8].phone} (CMA/SJMKW/0009)  [Member@2026]`);
 
   await client.end();
   void savingsBalances;

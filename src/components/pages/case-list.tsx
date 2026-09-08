@@ -43,6 +43,7 @@ export default async function CaseListPage({
   const refCol = type === 'project' ? 'project_no' : 'case_no';
   const search = String(sp.search || sp.q || '').trim();
   const status = String(sp.status || '');
+  const parish = String(sp.parish || '');
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
@@ -52,6 +53,10 @@ export default async function CaseListPage({
   if (status) {
     params.push(status);
     where.push(`c.status = $${params.length}`);
+  }
+  if (parish) {
+    params.push(Number(parish));
+    where.push(`c.parish_id = $${params.length}`);
   }
   if (search) {
     params.push(`%${search}%`);
@@ -73,7 +78,7 @@ export default async function CaseListPage({
   const titleCol =
     type === 'welfare' ? 'c.beneficiary_name' : type === 'funeral' ? 'c.deceased_name' : type === 'wedding' ? 'c.spouse_name' : 'c.name';
 
-  const [rows, countRow, totals, categories] = await Promise.all([
+  const [rows, countRow, totals, categories, parishes] = await Promise.all([
     query<any>(
       `SELECT c.id, c.${refCol} AS ref, c.status, c.amount_per_member, c.amount_collected, c.amount_disbursed,
               c.deadline, ${keyDate} AS key_date, ${expectedCol} AS expected, ${titleCol} AS title,
@@ -98,6 +103,7 @@ export default async function CaseListPage({
          FROM ${table.cases} c WHERE 1=1 ${scopeClause}`,
     ),
     type === 'project' ? query<any>('SELECT id, name FROM project_categories WHERE active = TRUE ORDER BY name') : Promise.resolve([] as any[]),
+    query<any>('SELECT id, name FROM parishes WHERE active = TRUE ORDER BY id'),
   ]);
 
   const total = Number(countRow?.total || 0);
@@ -145,6 +151,7 @@ export default async function CaseListPage({
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <SearchInput param="search" placeholder={type === 'project' ? 'Search projects…' : 'Search member or ref…'} className="w-48 sm:w-64" />
+                <SelectFilter param="parish" placeholder="All parishes" className="w-56" options={parishes.map((p: any) => ({ value: String(p.id), label: p.name }))} />
                 <SelectFilter
                   param="status"
                   placeholder="All statuses"
@@ -228,7 +235,7 @@ export default async function CaseListPage({
               </tbody>
             </Table>
             <div className="p-4">
-              <Pagination page={page} pageSize={PER_PAGE} total={total} basePath={meta.route} query={{ search, status }} />
+              <Pagination page={page} pageSize={PER_PAGE} total={total} basePath={meta.route} query={{ search, status, parish }} />
             </div>
           </>
         )}

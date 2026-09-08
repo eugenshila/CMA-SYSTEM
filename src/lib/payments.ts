@@ -1039,6 +1039,7 @@ export async function listPayments(filters: {
   from?: string | Date | null;
   to?: string | Date | null;
   search?: string;
+  parishId?: number | null;
   limit?: number;
   offset?: number;
 } = {}) {
@@ -1052,6 +1053,7 @@ export async function listPayments(filters: {
   if (filters.memberId) add('p.member_id = ?', filters.memberId);
   if (filters.status) add('p.status = ?', filters.status);
   if (filters.method) add('p.method = ?', filters.method);
+  if (filters.parishId) add('p.parish_id = ?', filters.parishId);
   if (filters.from) add('p.payment_date >= ?', `${sqlDate(filters.from)} 00:00:00`);
   if (filters.to) add('p.payment_date <= ?', `${sqlDate(filters.to)} 23:59:59`);
   if (filters.search) {

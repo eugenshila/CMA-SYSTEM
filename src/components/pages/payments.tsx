@@ -46,16 +46,17 @@ export default async function PaymentsPage({
   const to = String(sp.to || '');
   const method = String(sp.method || '');
   const status = String(sp.status || '');
+  const parish = String(sp.parish || '');
   const search = String(sp.search || sp.q || '').trim();
   const memberId = Number(sp.member_id || 0) || null;
   const reconciled = String(sp.reconciled || '');
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
-  const scope = user.scope_parish_id ? `AND p.parish_id = ${Number(user.scope_parish_id)}` : '';
+  const scope = user.scope_parish_id ? `AND p.parish_id = ${Number(user.scope_parish_id)}` : parish ? `AND p.parish_id = ${Number(parish)}` : '';
 
-  const [list, stats, byMethod, trend, unreconciledRows] = await Promise.all([
-    listPayments({ memberId, status, method, from: from || null, to: to || null, search, limit: PER_PAGE, offset }),
+  const [list, stats, byMethod, trend, unreconciledRows, parishes] = await Promise.all([
+    listPayments({ memberId, status, method, from: from || null, to: to || null, search, limit: PER_PAGE, offset, parishId: parish ? Number(parish) : user.scope_parish_id ? Number(user.scope_parish_id) : undefined } as any),
     one<any>(
       `SELECT COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date::date = CURRENT_DATE AND p.status = 'completed'),0) AS today,
               COALESCE(SUM(p.amount) FILTER (WHERE to_char(p.payment_date,'YYYY-MM') = $1 AND p.status = 'completed'),0) AS this_month,
@@ -81,6 +82,7 @@ export default async function PaymentsPage({
           `SELECT p.id FROM payments p WHERE p.status = 'completed' AND p.reconciled = FALSE ${scope} ORDER BY p.payment_date DESC LIMIT 200`,
         )
       : Promise.resolve([] as any[]),
+    query<any>('SELECT id, name FROM parishes WHERE active = TRUE ORDER BY id'),
   ]);
 
   // reconcile filter is applied in SQL above only for the bulk action list; keep the register consistent
@@ -144,6 +146,7 @@ export default async function PaymentsPage({
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <SearchInput param="search" placeholder="Receipt, ref, member…" className="w-48 sm:w-60" />
+                <SelectFilter param="parish" placeholder="All parishes" className="w-56" options={parishes.map((p: any) => ({ value: String(p.id), label: p.name }))} />
                 <SelectFilter param="method" placeholder="All methods" className="w-36" options={PAYMENT_METHODS} />
                 <SelectFilter
                   param="status"

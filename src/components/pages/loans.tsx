@@ -37,6 +37,7 @@ export default async function LoansPage({
   const search = String(sp.search || sp.q || '').trim();
   const status = String(sp.status || '');
   const typeId = String(sp.type || '');
+  const parish = String(sp.parish || '');
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
@@ -47,6 +48,10 @@ export default async function LoansPage({
     where.push(`l.member_id = $${params.length}`);
   } else if (user.scope_parish_id) {
     params.push(Number(user.scope_parish_id));
+    where.push(`m.parish_id = $${params.length}`);
+  }
+  if (parish) {
+    params.push(Number(parish));
     where.push(`m.parish_id = $${params.length}`);
   }
   if (status) {
@@ -66,7 +71,7 @@ export default async function LoansPage({
   const canRepay = can(user, 'payments.create') || can(user, 'sacco.create');
   const canHousekeep = can(user, 'loans.update') || can(user, 'loans.manage');
 
-  const [loans, countRow, totals, byStatus, loanTypes] = await Promise.all([
+  const [loans, countRow, totals, byStatus, loanTypes, parishes] = await Promise.all([
     query<any>(
       `SELECT l.*, m.full_name, m.membership_no, m.id AS member_id, lt.name AS loan_type, lt.code AS loan_code
          FROM loans l
@@ -96,6 +101,7 @@ export default async function LoansPage({
       params,
     ),
     query<any>(`SELECT id, code, name FROM loan_types WHERE active ORDER BY name`),
+    query<any>('SELECT id, name FROM parishes WHERE active = TRUE ORDER BY id'),
   ]);
 
   const total = Number(countRow?.total || 0);
@@ -142,6 +148,7 @@ export default async function LoansPage({
             {!ownOnly ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <SearchInput param="search" placeholder="Search member or loan no…" />
+                <SelectFilter param="parish" placeholder="All parishes" options={parishes.map((p: any) => ({ value: String(p.id), label: p.name }))} />
                 <SelectFilter
                   param="status"
                   placeholder="All statuses"
@@ -218,7 +225,7 @@ export default async function LoansPage({
             </Table>
           )}
           <div className="px-4 pb-4">
-            <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/loans" query={{ search, status, type: typeId }} />
+            <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/loans" query={{ search, status, type: typeId, parish }} />
           </div>
         </Card>
 

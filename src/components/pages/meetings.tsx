@@ -34,13 +34,17 @@ export default async function MeetingsPage({
   const search = String(sp.search || sp.q || '').trim();
   const type = String(sp.type || '');
   const status = String(sp.status || '');
+  const parish = String(sp.parish || '');
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
   const params: any[] = [];
   const where: string[] = ['1=1'];
-  // Members and parish-scoped staff see their parish meetings.
-  if (!staff || user.scope_parish_id) {
+  // Parish filter: St Joseph Mukasa Kahawa West / St Peter and Paul Marengeta / St Francis of Asisi Soweto
+  if (parish) {
+    params.push(Number(parish));
+    where.push(`mt.parish_id = $${params.length}`);
+  } else if (!staff || user.scope_parish_id) {
     const pid = user.scope_parish_id;
     if (pid) {
       params.push(Number(pid));
@@ -61,7 +65,7 @@ export default async function MeetingsPage({
   }
   const whereSql = where.join(' AND ');
 
-  const [meetings, countRow, stats, parishes, churches] = await Promise.all([
+  const [meetings, countRow, stats, parishes, churches, allParishes] = await Promise.all([
     query<any>(
       `SELECT mt.*,
               (SELECT count(*)::int FROM attendance a WHERE a.meeting_id = mt.id) AS total_members,
@@ -85,6 +89,7 @@ export default async function MeetingsPage({
     ),
     staff && canCreate ? query<any>(`SELECT id, name FROM parishes ORDER BY name`) : Promise.resolve([] as any[]),
     staff && canCreate ? query<any>(`SELECT id, name FROM churches ORDER BY name`) : Promise.resolve([] as any[]),
+    query<any>('SELECT id, name FROM parishes WHERE active = TRUE ORDER BY id'),
   ]);
 
   const total = Number(countRow?.total || 0);
@@ -106,9 +111,10 @@ export default async function MeetingsPage({
 
       <Card padded={false}>
         <div className="p-4">
-          <CardHeader title="Meetings" subtitle={`${total} meeting${total === 1 ? '' : 's'}`} />
+          <CardHeader title="Meetings" subtitle={`${total} meeting${total === 1 ? '' : 's'} — St Joseph Mukasa Kahawa West / St Peter and Paul Marengeta / St Francis of Asisi Soweto`} />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <SearchInput param="search" placeholder="Search meetings…" />
+            <SelectFilter param="parish" placeholder="All parishes" options={allParishes.map((p: any) => ({ value: String(p.id), label: p.name }))} />
             <SelectFilter param="type" placeholder="All types" options={MEETING_TYPES} />
             <SelectFilter param="status" placeholder="All statuses" options={[
               { value: 'scheduled', label: 'Scheduled' },
@@ -166,7 +172,7 @@ export default async function MeetingsPage({
           </Table>
         )}
         <div className="px-4 pb-4">
-          <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/meetings" query={{ search, type, status }} />
+          <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/meetings" query={{ search, type, status, parish }} />
         </div>
       </Card>
     </div>

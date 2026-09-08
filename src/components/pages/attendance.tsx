@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ClipboardCheck, CalendarDays, UserCheck, TrendingUp, Award } from 'lucide-react';
 import { Badge, Card, CardHeader, EmptyState, ProgressBar, SectionHeading, StatCard, Table, Td, Th } from '../ui/primitives';
+import { SelectFilter } from '../ui/client';
 import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
@@ -14,11 +15,13 @@ const STATUS_TONES: Record<string, string> = {
   absent: 'badge badge-grey',
 };
 
-export default async function AttendancePage({ user }: { user: SessionUser }) {
+export default async function AttendancePage({ user, sp }: { user: SessionUser; sp?: Record<string, string | string[] | undefined> }) {
   if (!can(user, 'attendance.view') && !user.member_id) redirect('/dashboard');
 
   const member = isMember(user);
-  const parishFilter = user.scope_parish_id ? `AND (mt.parish_id = ${Number(user.scope_parish_id)} OR mt.parish_id IS NULL)` : '';
+  const parishParam = sp ? String(sp.parish || '') : '';
+  const parishId = parishParam ? Number(parishParam) : user.scope_parish_id ? Number(user.scope_parish_id) : null;
+  const parishFilter = parishId ? `AND (mt.parish_id = ${Number(parishId)} OR mt.parish_id IS NULL)` : user.scope_parish_id ? `AND (mt.parish_id = ${Number(user.scope_parish_id)} OR mt.parish_id IS NULL)` : '';
 
   if (member) {
     // ---- Member self-service: my attendance history ----
@@ -74,7 +77,7 @@ export default async function AttendancePage({ user }: { user: SessionUser }) {
   }
 
   // ---- Staff: parish-wide attendance overview ----
-  const [byMeeting, leaders, overall] = await Promise.all([
+  const [byMeeting, leaders, overall, parishes] = await Promise.all([
     query<any>(
       `SELECT mt.id, mt.title, mt.meeting_date, mt.meeting_type, mt.status,
               (SELECT count(*)::int FROM attendance a WHERE a.meeting_id = mt.id) AS total_members,
@@ -102,13 +105,19 @@ export default async function AttendancePage({ user }: { user: SessionUser }) {
               count(*) FILTER (WHERE a.status = 'absent')::int AS absent
          FROM attendance a JOIN meetings mt ON mt.id = a.meeting_id WHERE 1=1 ${parishFilter}`,
     ),
+    query<any>('SELECT id, name FROM parishes WHERE active = TRUE ORDER BY id'),
   ]);
 
   const overallRate = overall?.records ? Math.round((Number(overall.present) / Number(overall.records)) * 100) : 0;
 
   return (
     <div className="space-y-5">
-      <SectionHeading title="Attendance" subtitle="Meeting-by-meeting attendance and member participation across the parish." action={<Link href="/meetings" className="btn btn-outline btn-sm"><CalendarDays className="h-4 w-4" /> Meetings</Link>} />
+      <SectionHeading title="Attendance" subtitle="Meeting-by-meeting attendance and member participation — St Joseph Mukasa Kahawa West / St Peter and Paul Marengeta / St Francis of Asisi Soweto." action={
+        <div className="flex items-center gap-2">
+          {!member ? <SelectFilter param="parish" placeholder="All parishes" className="w-56" options={parishes.map((p: any) => ({ value: String(p.id), label: p.name }))} /> : null}
+          <Link href="/meetings" className="btn btn-outline btn-sm"><CalendarDays className="h-4 w-4" /> Meetings</Link>
+        </div>
+      } />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Meetings tracked" value={String(overall?.meetings || 0)} tone="navy" icon={<CalendarDays className="h-4 w-4" />} />

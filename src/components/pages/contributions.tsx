@@ -47,13 +47,14 @@ export default async function ContributionsPage({
   const settings = await getContributionSettings();
   const period = String(sp.period || periodKey(new Date()));
   const status = String(sp.status || '');
+  const parishFilter = String(sp.parish || '');
   const churchId = Number(sp.church_id || 0) || null;
   const sccId = Number(sp.scc_id || 0) || null;
   const search = String(sp.search || sp.q || '').trim();
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
-  const scope = user.scope_parish_id ? `AND m.parish_id = ${Number(user.scope_parish_id)}` : '';
+  const scope = user.scope_parish_id ? `AND m.parish_id = ${Number(user.scope_parish_id)}` : parishFilter ? `AND m.parish_id = ${Number(parishFilter)}` : '';
   const params: any[] = [period];
   const where = [`mc.period = $1`];
   if (status) {
@@ -230,6 +231,7 @@ export default async function ContributionsPage({
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <SearchInput param="search" placeholder="Search member…" className="w-44 sm:w-56" extraParams={{ period }} />
+                <SelectFilter param="parish" placeholder="All parishes" className="w-56" options={parishes.map((p: any) => ({ value: String(p.id), label: p.name }))} />
                 <SelectFilter
                   param="status"
                   placeholder="All statuses"
@@ -340,7 +342,7 @@ export default async function ContributionsPage({
               </tbody>
             </Table>
             <div className="p-4">
-              <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/contributions" query={{ period, status, church_id: churchId, scc_id: sccId, search }} />
+              <Pagination page={page} pageSize={PER_PAGE} total={total} basePath="/contributions" query={{ period, status, parish: parishFilter, church_id: churchId, scc_id: sccId, search }} />
             </div>
           </>
         )}

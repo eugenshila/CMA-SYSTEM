@@ -42,6 +42,7 @@ export const NAV: NavSection[] = [
       { label: 'Funeral', href: '/funerals', icon: 'cross', permission: 'funerals.view' },
       { label: 'Wedding', href: '/weddings', icon: 'heart-handshake', permission: 'weddings.view' },
       { label: 'Projects & Special', href: '/projects', icon: 'hand-coins', permission: 'projects.view' },
+      { label: 'Last Respect Insurance', href: '/insurance', icon: 'shield-plus', permission: 'insurance.view' },
     ],
   },
   {
