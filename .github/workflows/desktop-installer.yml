@@ -24,7 +24,9 @@ jobs:
           - os: macos-latest
             label: macos
             args: --mac
-            asset_glob: 'release/*.dmg release/*.zip'
+            asset_glob: |
+              release/*.dmg
+              release/*.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -68,4 +70,4 @@ jobs:
           set -e
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
             || gh release create "${GITHUB_REF_NAME}" --generate-notes
-          gh release upload "${GITHUB_REF_NAME}" ${{ matrix.asset_glob }} --clobber
+          gh release upload "${GITHUB_REF_NAME}" "${{ matrix.asset_glob }}" --clobber
