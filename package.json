@@ -58,6 +58,11 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.2"
   },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.28"
+    }
+  },
   "engines": {
     "node": ">=20"
   }
