@@ -98,7 +98,7 @@ async function logChannel(
   try {
     await execute(
       `INSERT INTO notification_logs (notification_id, channel, destination, provider, status, message, sent_at)
-       VALUES ($1,$2,$3,$4,$5,$6, CASE WHEN $5 IN ('sent','delivered') THEN now() ELSE NULL END)`,
+       VALUES ($1,$2,$3,$4,$5::varchar,$6, CASE WHEN $5::varchar IN ('sent','delivered') THEN now() ELSE NULL END)`,
       [notificationId, channel, destination, provider, status, message],
     );
   } catch (e: any) {
