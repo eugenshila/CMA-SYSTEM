@@ -1,5 +1,6 @@
 import 'server-only';
 import pg from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { env } from './env';
 
 const { Pool, types } = pg;
@@ -9,20 +10,61 @@ const { Pool, types } = pg;
 types.setTypeParser(20, (v: string) => (v === null ? null : parseInt(v, 10)));
 types.setTypeParser(1700, (v: string) => (v === null ? null : parseFloat(v)));
 
+/**
+ * Tracks the client that currently owns the open transaction, so every query
+ * issued while `tx()` is on the stack (including helper functions that do not
+ * receive/receive-ignore the `client` argument — settings loaders, audit,
+ * `monthlyContributionType()`, …) is routed onto that same connection.
+ *
+ * Without this, a client-less query inside a transaction checks out a SECOND
+ * pooled client. Against the local PGlite server the pool is capped at one
+ * connection, so that checkout can never be satisfied and the request hangs
+ * until the driver's connection timeout — the "recording a payment times out"
+ * bug. With a larger pool the query would silently run OUTSIDE the
+ * transaction, reading pre-transaction data and losing atomicity.
+ */
+const txContext = new AsyncLocalStorage<{ client: pg.PoolClient }>();
+
+/** The transaction client for the current async context, if inside `tx()`. */
+export function currentTxClient(): pg.PoolClient | undefined {
+  return txContext.getStore()?.client;
+}
+
+/** True when DATABASE_URL points at a loopback host (the bundled PGlite dev server). */
+function isLocalDatabase(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
+  } catch {
+    return false;
+  }
+}
+
 // In dev, Next.js hot-reload re-evaluates this module and a module-level
 // `let pool` would build a fresh Pool each time — every instance holding its
 // own connection(s). Against the bundled single-threaded PGlite server,
 // concurrent queries from those leaked pools collide and sockets get
 // destroyed (client-side ECONNRESET bursts). Anchoring the pool on
-// globalThis keeps exactly one pool (and with PGPOOL_MAX=1, one connection)
-// alive across reloads — the same pattern used for Prisma in Next dev.
+// globalThis keeps exactly one pool alive across reloads — the same pattern
+// used for Prisma in Next dev.
 const globalForPg = globalThis as unknown as { __cmaPgPool?: pg.Pool };
 
 export function getPool(): pg.Pool {
   if (!globalForPg.__cmaPgPool) {
+    // The bundled PGlite dev server is a single-threaded WASM Postgres: every
+    // extra socket only adds contention and dropped connections. Loopback
+    // DATABASE_URLs are therefore pinned to ONE pooled connection regardless
+    // of PGPOOL_MAX — do not "fix" a slow request by raising this; widen the
+    // retry window or fix the query instead.
+    const local = isLocalDatabase(env.DATABASE_URL);
+    const configured = parseInt(process.env.PGPOOL_MAX || '8', 10);
+    const max = local ? 1 : configured;
+    if (local && configured > 1) {
+      console.warn('[db] localhost DATABASE_URL (PGlite dev server): forcing pool max=1 (PGPOOL_MAX ignored)');
+    }
     const p = new Pool({
       connectionString: env.DATABASE_URL,
-      max: parseInt(process.env.PGPOOL_MAX || '8', 10),
+      max,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 15_000,
       ssl: env.DATABASE_URL.includes('sslmode=require') || process.env.PGSSL === '1'
@@ -73,9 +115,13 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 4): Promise<T> {
 }
 
 export async function query<T = any>(text: string, params: any[] = [], client?: Queryable): Promise<T[]> {
-  const runner = client || getPool();
+  // Inside an open transaction, a query without an explicit client MUST reuse
+  // the transaction's own connection (see txContext) — never check out another.
+  const ambient = client ? undefined : currentTxClient();
+  const runner = (client || ambient || getPool()) as pg.Pool | pg.PoolClient;
   const run = async () => (await runner.query(text, params)).rows as T[];
-  return client ? run() : withRetry(run);
+  // Retries are only safe outside a transaction — the caller owns rollback.
+  return client || ambient ? run() : withRetry(run);
 }
 
 export async function one<T = any>(text: string, params: any[] = [], client?: Queryable): Promise<T | null> {
@@ -95,19 +141,25 @@ export async function scalar<T = any>(text: string, params: any[] = [], client?:
 }
 
 export async function execute(text: string, params: any[] = [], client?: Queryable): Promise<number> {
-  const runner = client || getPool();
+  const ambient = client ? undefined : currentTxClient();
+  const runner = (client || ambient || getPool()) as pg.Pool | pg.PoolClient;
   const run = async () => (await runner.query(text, params)).rowCount ?? 0;
-  return client ? run() : withRetry(run);
+  return client || ambient ? run() : withRetry(run);
 }
 
 /**
  * Run `fn` inside a database transaction. Rollback is automatic on throw.
+ *
+ * The client is also published through AsyncLocalStorage, so helper functions
+ * called inside `fn` (settings loaders, audit, `monthlyContributionType()`, …)
+ * automatically issue their queries on this same connection even when they are
+ * not handed the client explicitly.
  */
 export async function tx<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const client = await withRetry(() => getPool().connect(), 3);
   try {
     await client.query('BEGIN');
-    const result = await fn(client);
+    const result = await txContext.run({ client }, () => fn(client));
     await client.query('COMMIT');
     return result;
   } catch (err) {
