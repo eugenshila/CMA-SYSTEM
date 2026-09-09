@@ -4,7 +4,7 @@ import { one, query, execute, tx } from './db';
 import { num, round2 } from './money';
 import { isoDate, periodKey, sqlDate, toDate } from './dates';
 import { generateReceiptNo } from './crypto';
-import { getOrganisation } from './settings';
+import { getOrganisation, getContributionSettings } from './settings';
 import { logAudit, diffObjects } from './audit';
 import { notify } from './notify';
 import {
@@ -95,6 +95,16 @@ export async function recordPayment(input: RecordPaymentInput) {
   const receiptNo = generateReceiptNo(org.short_name?.replace(/\s+/g, '') || 'CMA');
   const paymentDate = toDate(input.paymentDate) || new Date();
 
+  // Settings and the monthly contribution type are loaded BEFORE `BEGIN`:
+  // with the single-connection localhost (PGlite) pool, any query issued
+  // inside the transaction that needed a second client would block until the
+  // request timed out. (db.ts now also routes such queries onto the
+  // transaction's own client — this pre-load is the fast, explicit path.)
+  const [contributionSettings, monthlyType] = await Promise.all([
+    getContributionSettings(),
+    monthlyContributionType(),
+  ]);
+
   const result = await tx(async (client) => {
     const payment = await one<any>(
       `INSERT INTO payments
@@ -131,6 +141,8 @@ export async function recordPayment(input: RecordPaymentInput) {
         paymentDate,
         method: input.method,
         actor: input.actor,
+        monthlyType,
+        settings: contributionSettings,
       });
 
       await execute(
@@ -244,13 +256,16 @@ export async function applyAllocation(
     paymentDate: Date;
     method: string;
     actor?: { id: number; name: string } | null;
+    /** Preloaded before BEGIN by recordPayment — avoids in-transaction lookups. */
+    monthlyType?: any;
+    settings?: any;
   },
 ) {
   const { allocation: a, member } = ctx;
 
   switch (a.type) {
     case 'monthly_contribution': {
-      const type = await monthlyContributionType();
+      const type = ctx.monthlyType ?? (await monthlyContributionType());
       const period = a.period || periodKey(ctx.paymentDate);
       await applyContributionPayment({
         memberId: member.id,
@@ -260,6 +275,7 @@ export async function applyAllocation(
         paymentId: ctx.paymentId,
         date: ctx.paymentDate,
         client,
+        settings: ctx.settings,
       });
       break;
     }
@@ -397,12 +413,15 @@ export async function reversePayment(opts: {
 
   const allocations = await query<any>('SELECT * FROM payment_allocations WHERE payment_id = $1', [opts.paymentId]);
   const org = await getOrganisation();
+  // Loaded before BEGIN (see recordPayment) so nothing inside the transaction
+  // has to run a client-less settings/type lookup.
+  const monthlyType = await monthlyContributionType();
 
   const result = await tx(async (client) => {
     const reversalReceipt = generateReceiptNo(org.short_name?.replace(/\s+/g, '') || 'CMA');
 
     for (const a of allocations) {
-      await reverseAllocation(client, a, payment);
+      await reverseAllocation(client, a, payment, monthlyType);
     }
 
     const reversal = await one<any>(
@@ -483,11 +502,11 @@ export async function reversePayment(opts: {
   return result;
 }
 
-async function reverseAllocation(client: PoolClient, allocation: any, payment: any) {
+async function reverseAllocation(client: PoolClient, allocation: any, payment: any, monthlyType?: any) {
   const amount = -num(allocation.amount);
   switch (allocation.allocation_type) {
     case 'monthly_contribution': {
-      const type = await monthlyContributionType();
+      const type = monthlyType ?? (await monthlyContributionType());
       const row = await one<any>(
         `SELECT * FROM member_contributions WHERE member_id = $1 AND contribution_type_id = $2 AND period = $3`,
         [payment.member_id, type!.id, allocation.period],

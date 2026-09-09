@@ -16,6 +16,8 @@ export async function monthlyContributionType() {
   return one<any>(`SELECT * FROM contribution_types WHERE key = 'monthly_contribution' LIMIT 1`);
 }
 
+export type ContributionSettings = Awaited<ReturnType<typeof getContributionSettings>>;
+
 /** Member scope used by case based (welfare / funeral / wedding / project) collections. */
 export async function membersInScope(scope: {
   scope_type?: string;
@@ -65,9 +67,13 @@ export async function getOrCreateContribution(opts: {
   dueDate?: Date | string | null;
   exempted?: boolean;
   client?: PoolClient;
+  /** Preload with getContributionSettings() BEFORE opening a transaction and pass in here. */
+  settings?: ContributionSettings;
 }) {
   const client = opts.client;
-  const settings = await getContributionSettings();
+  // Callers inside a transaction must pass `settings`; loading here would
+  // otherwise issue a query mid-transaction (deadlocks on a 1-connection pool).
+  const settings = opts.settings ?? (await getContributionSettings());
   const existing = await one<any>(
     `SELECT * FROM member_contributions WHERE member_id = $1 AND contribution_type_id = $2 AND period = $3`,
     [opts.memberId, opts.typeId, opts.period],
@@ -112,10 +118,14 @@ export async function getOrCreateContribution(opts: {
   return created;
 }
 
-export async function recalcContribution(contributionId: number, client?: PoolClient) {
+export async function recalcContribution(
+  contributionId: number,
+  client?: PoolClient,
+  preloadedSettings?: ContributionSettings,
+) {
   const row = await one<any>('SELECT * FROM member_contributions WHERE id = $1', [contributionId], client);
   if (!row) return null;
-  const settings = await getContributionSettings();
+  const settings = preloadedSettings ?? (await getContributionSettings());
   const penalty =
     settings.penalty_enabled && statusFor(row) === 'overdue' && num(row.penalty) === 0
       ? round2(settings.penalty_amount)
@@ -138,6 +148,8 @@ export async function applyContributionPayment(opts: {
   paymentId?: number | null;
   date?: Date | string | null;
   client?: PoolClient;
+  /** Preload with getContributionSettings() BEFORE opening a transaction and pass in here. */
+  settings?: ContributionSettings;
 }) {
   const client = opts.client;
   const contribution = await getOrCreateContribution({
@@ -145,13 +157,14 @@ export async function applyContributionPayment(opts: {
     typeId: opts.typeId,
     period: opts.period,
     client,
+    settings: opts.settings,
   });
   await execute(
     `UPDATE member_contributions SET amount_paid = amount_paid + $2 WHERE id = $1`,
     [contribution.id, round2(num(opts.amount))],
     client,
   );
-  return recalcContribution(contribution.id, client);
+  return recalcContribution(contribution.id, client, opts.settings);
 }
 
 /** Generate the monthly bill for every member in scope. */
