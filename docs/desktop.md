@@ -29,6 +29,19 @@ PGlite is real PostgreSQL 18 compiled to WebAssembly, exposed over the standard
 wire protocol via `@electric-sql/pglite-socket`, so migrations, extensions
 syntax and the `pg` driver behave exactly as in production.
 
+### Packaging: why the standalone server is unpacked from app.asar
+
+The main process (and everything it loads — `desktop/*.cjs`, `db/migrations`,
+PGlite) runs from inside the `app.asar` archive, which Electron's patched `fs`
+reads natively. The spawned Next.js server is different: it runs as a plain
+Node.js child process (`ELECTRON_RUN_AS_NODE=1`), and plain Node **cannot read
+inside an asar archive**. The installers therefore ship the standalone build as
+real files under `app.asar.unpacked/.next/standalone/` (`asarUnpack` in
+`electron-builder.yml`), and `desktop/bootstrap.cjs` translates the path at
+runtime. `npm run desktop:smoke` guards this contract on every CI build —
+without it the installed app fails at startup with `MODULE_NOT_FOUND` and never
+reaches the login screen (the v1.0.1 bug).
+
 ## Prerequisites
 
 - Node.js 20+ (Node 22 recommended)
@@ -46,6 +59,19 @@ npm run dist:dir      # unpacked build (fastest local smoke test)
 `dist:*` runs, in order: `next build` (standalone output) → copy static assets →
 render the app icon → `electron-builder`. On Windows you get a per-user NSIS
 installer with a desktop shortcut and Start Menu entry.
+
+## Verifying the desktop startup path
+
+```bash
+npm ci && npm run build && npm run desktop:smoke
+```
+
+The smoke test boots the exact production stack (embedded PostgreSQL,
+migrations, first-run admin, spawned Next.js server) and verifies the login
+screen renders — once from the source tree and once against a simulated
+installed app (`app.asar` + `app.asar.unpacked`), reproducing the packaged
+layout where a plain Node child cannot read inside the archive. CI runs it on
+every platform before the installers are built and attached to a release.
 
 ## Development
 
@@ -84,6 +110,8 @@ Inside it:
 - `pglite/` — the PostgreSQL data directory (back this up)
 - `config.json` — per-installation `AUTH_SECRET` and `ENCRYPTION_KEY`
 - `first-run-credentials.txt` — created on first launch only
+- `desktop.log` — startup log of the most recent sessions (rotated to
+  `desktop.log.old` past 2 MB); the failure dialog points here
 
 `AUTH_SECRET` signs sessions and `ENCRYPTION_KEY` derives the key for encrypted
 member identifiers; both are generated once and must be preserved (losing them
@@ -113,8 +141,14 @@ git push origin v1.1.0
 ## Troubleshooting
 
 - **"Standalone server not found"** — run `npm run build` before `dist:*`.
-- **Blank window / startup failed** — the error is shown in a dialog; also check
-  `stderr` when running `npm run desktop:dev`.
+- **Startup failed / server stopped unexpectedly** — the dialog shows the cause
+  and the path to `desktop.log` in the data directory; send that file when
+  reporting the problem. It contains the full startup trace, including the
+  spawned web server's output.
+- **"...packed inside app.asar..."** — the installers were built without the
+  `asarUnpack: .next/standalone/**` entry in `electron-builder.yml`; rebuild
+  after restoring it (CI's `npm run desktop:smoke` step catches this).
+- **Blank window** — also check `stderr` when running `npm run desktop:dev`.
 - **Port conflicts** — all ports (database and web) are ephemeral and bound to
   `127.0.0.1`, so conflicts are avoided automatically.
 - **Slow first launch** — the one-time schema migration (large SQL files) runs

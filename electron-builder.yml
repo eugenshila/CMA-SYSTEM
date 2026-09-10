@@ -22,10 +22,18 @@ files:
 
 # PGlite loads a WebAssembly binary and its native add-ons; unpack so they are
 # readable as real files from the asar archive.
+#
+# The standalone Next.js server must ALSO be unpacked: it is spawned as a plain
+# Node.js child process (ELECTRON_RUN_AS_NODE), which cannot read inside
+# app.asar — without this entry the installed app fails at startup with
+# MODULE_NOT_FOUND and never reaches the login screen. desktop/bootstrap.cjs
+# resolves the app.asar.unpacked path at runtime; scripts/desktop-smoke.mjs
+# guards this contract (run via `npm run desktop:smoke`).
 asarUnpack:
   - node_modules/@electric-sql/**
   - node_modules/**/*.wasm
   - node_modules/**/*.node
+  - .next/standalone/**
 
 extraMetadata:
   main: electron/main.cjs
