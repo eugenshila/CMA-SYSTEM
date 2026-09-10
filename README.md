@@ -87,13 +87,16 @@ npm install
 npm run dist:win     # builds release/CMA System-Setup-*.exe (NSIS installer)
 npm run dist         # current platform
 npm run dist:dir     # unpacked build (fast local smoke test)
+npm run desktop:smoke  # verifies the packaged startup path end-to-end (after npm run build)
 npm run desktop:dev  # dev mode: npm run dev:all first, then CMA_DEV_URL=http://localhost:3000 electron .
 ```
 
 The installer is a normal per-user install. All data lives under the user's
 application data directory (`%APPDATA%/CMA System`), with the database in
 `pglite/` and a generated Super Administrator login written to
-`first-run-credentials.txt` on first launch.
+`first-run-credentials.txt` on first launch. Startup output (including any
+failure cause) is written to `desktop.log` in the same directory, and the
+failure dialog names that file.
 
 CI builds Windows (NSIS), Linux (AppImage) and macOS (DMG) installers on every
 `v*` tag via `.github/workflows/desktop-installer.yml`. See

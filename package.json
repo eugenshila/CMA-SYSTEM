@@ -17,6 +17,7 @@
     "dev:all": "node scripts/dev-all.mjs",
     "desktop:dev": "node scripts/make-icons.mjs && electron .",
     "desktop:icons": "node scripts/make-icons.mjs",
+    "desktop:smoke": "node scripts/desktop-smoke.mjs",
     "desktop:prepare": "node scripts/prepare-standalone.mjs",
     "dist": "npm run build && npm run desktop:prepare && npm run desktop:icons && electron-builder --publish never",
     "dist:win": "npm run build && npm run desktop:prepare && npm run desktop:icons && electron-builder --win --publish never",

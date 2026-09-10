@@ -11,6 +11,12 @@
  *
  * Everything the app needs to talk to Postgres is the ordinary `DATABASE_URL`
  * connection string, so desktop and Railway production share one code path.
+ *
+ * Packaging note: in the installed app this file runs from inside app.asar
+ * (fine — the Electron main process reads asar natively), but the Next.js
+ * server it spawns must be unpacked (asarUnpack: .next/standalone/**) and is
+ * launched via its real app.asar.unpacked path, because the spawned plain
+ * Node.js process cannot read inside the archive.
  */
 'use strict';
 
@@ -44,6 +50,59 @@ function loadOrCreateConfig(dataDir) {
   };
   fs.writeFileSync(file, JSON.stringify(config, null, 2));
   return config;
+}
+
+/**
+ * Map a path inside the packaged app's app.asar archive to the matching real
+ * file in the sibling app.asar.unpacked directory (electron-builder's
+ * `asarUnpack` option).
+ *
+ * Why this is needed: asar archives are a *virtual* filesystem that only
+ * Electron's patched `fs` can read (main/renderer processes). The Next.js
+ * server is spawned as a plain Node.js child process (`ELECTRON_RUN_AS_NODE`),
+ * which has no asar support at all — `node .../app.asar/.next/standalone/server.js`
+ * fails with MODULE_NOT_FOUND. The child must be handed the real on-disk path.
+ * Windows path separators are handled too (this runs on every platform).
+ */
+function asarUnpackedPath(p) {
+  const m = /([\\/])app\.asar([\\/])/.exec(p);
+  if (!m) return p;
+  const archiveStart = m.index + m[1].length; // index of "app.asar" itself
+  return p.slice(0, archiveStart) + 'app.asar.unpacked' + p.slice(archiveStart + 'app.asar'.length);
+}
+
+/**
+ * Resolve the standalone server entry point that can be handed to the spawned
+ * Node.js child process.
+ *
+ * Three cases:
+ *  1. the (possibly unpacked) real file exists          → spawn it,
+ *  2. only the in-archive virtual path exists (Electron)→ the package was
+ *     built without unpacking `.next/standalone` — fail with the fix,
+ *  3. nothing exists                                    → run `npm run build`.
+ *
+ * @param {string} standaloneDir
+ * @returns {{ serverJs: string, serverJsReal: string }}
+ */
+function resolveServerEntry(standaloneDir) {
+  const serverJs = path.join(standaloneDir, 'server.js');
+  const serverJsReal = asarUnpackedPath(serverJs);
+
+  if (fs.existsSync(serverJsReal)) {
+    return { serverJs, serverJsReal };
+  }
+  if (fs.existsSync(serverJs)) {
+    throw new Error(
+      'The standalone web server is packed inside app.asar, where the spawned ' +
+        'Node.js server cannot read it. Add `.next/standalone/**` to `asarUnpack` ' +
+        'in electron-builder.yml and rebuild the installers. (' +
+        serverJs +
+        ')',
+    );
+  }
+  throw new Error(
+    'Standalone server not found at ' + serverJs + ' — run `npm run build` before packaging.',
+  );
 }
 
 /** Reserve a free TCP port on loopback (the window is tiny for a desktop app). */
@@ -84,13 +143,17 @@ function waitForHttp(url, timeoutMs = 60_000) {
 
 /**
  * @param {object} opts
- * @param {string} opts.dataDir       where PGlite data + config + credentials live
- * @param {boolean} [opts.seed]       currently unused (kept for future demo seed)
+ * @param {string} opts.dataDir            where PGlite data + config + credentials live
+ * @param {string} [opts.standaloneDir]    override for the Next.js standalone build
+ *                                         directory (defaults to <app>/.next/standalone);
+ *                                         the smoke test uses this to simulate the packaged
+ *                                         app.asar / app.asar.unpacked layout
+ * @param {boolean} [opts.seed]            currently unused (kept for future demo seed)
  * @param {Console|object} [opts.logger]
  * @param {(msg: string) => void} [opts.onStatus]
  * @param {(code: number|null, signal: string|null) => void} [opts.onWebExit]
  */
-async function startDesktop({ dataDir, logger = console, onStatus, onWebExit } = {}) {
+async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus, onWebExit } = {}) {
   const log = (msg) => {
     logger.log(msg);
     if (onStatus) onStatus(msg);
@@ -128,13 +191,10 @@ async function startDesktop({ dataDir, logger = console, onStatus, onWebExit } =
 
   const webPort = await getFreePort();
 
-  const standaloneDir = path.resolve(__dirname, '..', '.next', 'standalone');
-  const serverJs = path.join(standaloneDir, 'server.js');
-  if (!fs.existsSync(serverJs)) {
-    throw new Error(
-      'Standalone server not found at ' + serverJs + ' — run `npm run build` before packaging.',
-    );
-  }
+  const resolvedStandaloneDir = standaloneDir
+    ? path.resolve(standaloneDir)
+    : path.resolve(__dirname, '..', '.next', 'standalone');
+  const { serverJsReal } = resolveServerEntry(resolvedStandaloneDir);
 
   const webEnv = {
     ...process.env,
@@ -151,23 +211,52 @@ async function startDesktop({ dataDir, logger = console, onStatus, onWebExit } =
   };
 
   log('[desktop] starting web server on http://127.0.0.1:' + webPort + ' …');
+  log('[desktop] web server entry: ' + serverJsReal);
   // Under Electron this runs the bundled Node (ELECTRON_RUN_AS_NODE); under a
-  // plain Node smoke test it is simply `node server.js`.
+  // plain Node smoke test it is simply `node server.js`. The entry point must
+  // be a real file (app.asar.unpacked/…), never a path inside app.asar —
+  // see asarUnpackedPath() above.
   const { spawn } = require('node:child_process');
-  const web = spawn(process.execPath, [serverJs], {
+  const web = spawn(process.execPath, [serverJsReal], {
     env: { ...webEnv, ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  // Keep the tail of the child's stderr so an early crash can be reported
+  // with its actual cause (e.g. MODULE_NOT_FOUND) instead of a bare exit code.
+  const stderrTail = [];
   web.stdout.on('data', (c) => logger.log('[web] ' + String(c).trimEnd()));
-  web.stderr.on('data', (c) => logger.error('[web] ' + String(c).trimEnd()));
+  web.stderr.on('data', (c) => {
+    const s = String(c);
+    logger.error('[web] ' + s.trimEnd());
+    stderrTail.push(s);
+    if (stderrTail.length > 30) stderrTail.shift();
+  });
   web.on('exit', (code, signal) => {
     logger.log(`[desktop] web server exited (code=${code}, signal=${signal})`);
     if (onWebExit) onWebExit(code, signal);
   });
 
   const url = `http://127.0.0.1:${webPort}`;
-  await waitForHttp(url, 60_000);
+  // Fail fast when the spawned server dies during startup (with its output),
+  // instead of waiting out the full HTTP timeout.
+  const earlyExit = new Promise((_, reject) => {
+    web.once('exit', (code, signal) => {
+      // Give buffered stdout/stderr a moment to land in stderrTail.
+      setTimeout(() => {
+        const details = stderrTail.join('').trim();
+        reject(
+          new Error(
+            `The web server exited before it became ready (code=${code}, signal=${signal}).` +
+              (details
+                ? '\n--- web server output ---\n' + details.split('\n').slice(-15).join('\n')
+                : ''),
+          ),
+        );
+      }, 150);
+    });
+  });
+  await Promise.race([waitForHttp(url, 60_000), earlyExit]);
   log('[desktop] web server ready at ' + url);
 
   return {
@@ -180,6 +269,7 @@ async function startDesktop({ dataDir, logger = console, onStatus, onWebExit } =
     db,
     socketServer,
     web,
+    serverPath: serverJsReal,
   };
 }
 
@@ -202,4 +292,4 @@ async function stopDesktop(handle) {
   }
 }
 
-module.exports = { startDesktop, stopDesktop };
+module.exports = { startDesktop, stopDesktop, asarUnpackedPath, resolveServerEntry };

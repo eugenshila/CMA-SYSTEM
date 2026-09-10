@@ -48,6 +48,9 @@ jobs:
       - name: Build Next.js standalone server
         run: npm run build
 
+      - name: Desktop startup smoke test
+        run: npm run desktop:smoke
+
       - name: Generate app icon
         run: npm run desktop:icons
 
