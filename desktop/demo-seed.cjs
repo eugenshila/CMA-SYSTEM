@@ -874,8 +874,8 @@ async function seedDemoData(options = {}) {
   });
 
   const funeralData = [
-    { id: 1, case_no: 'FUN/2026/0001', member: 12, deceased: 'Mrs. Margaret Collins', relationship: 'spouse', dod: date(2026, 5, 4), funeral: date(2026, 5, 9), burial: 'Marengeta — family home', mortuary: 'Lee Funeral Home', per: 1000, deadline: date(2026, 5, 8), status: 'disbursed', disbursed: 46000, notes: null },
-    { id: 2, case_no: 'FUN/2026/0002', member: 28, deceased: 'Mr. Peter Delaney Snr.', relationship: 'parent', dod: date(2026, 8, 18), funeral: date(2026, 8, 24), burial: 'Soweto — family plot', mortuary: 'Nairobi Mortuary', per: 800, deadline: date(2026, 8, 23), status: 'open', disbursed: 0, notes: null },
+    { id: 1, case_no: 'FUN/2026/0001', member: 12, deceased: 'Mrs. Margaret Collins', relationship: 'spouse', dod: date(2026, 5, 4), funeral: date(2026, 5, 9), burial: 'Marengeta — family home', mortuary: 'Serenity Meadows Funeral Home', per: 1000, deadline: date(2026, 5, 8), status: 'disbursed', disbursed: 46000, notes: null },
+    { id: 2, case_no: 'FUN/2026/0002', member: 28, deceased: 'Mr. Peter Delaney Snr.', relationship: 'parent', dod: date(2026, 8, 18), funeral: date(2026, 8, 24), burial: 'Soweto — family plot', mortuary: 'Evergreen Funeral Services', per: 800, deadline: date(2026, 8, 23), status: 'open', disbursed: 0, notes: null },
     { id: 3, case_no: 'FUN/2026/0003', member: 33, deceased: 'Mrs. Catherine Ashford', relationship: 'spouse', dod: date(2026, 7, 6), funeral: date(2026, 7, 11), burial: 'Kahawa West — family home', mortuary: 'St. Mary Funeral Home', per: 500, deadline: date(2026, 7, 10), status: 'disbursed', disbursed: 150000, notes: 'Last Respect Insurance benefit of KSh 150,000 paid to the family within 48 hours of claim submission. A CMA delegation attended the funeral and a wreath was laid on behalf of the association.' },
   ];
   const funeralCollected = { 1: 0, 2: 0, 3: 0 };
