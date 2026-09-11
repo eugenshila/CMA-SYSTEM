@@ -67,7 +67,7 @@ export function UserForm({
       <ResultAlert result={state} />
       {record?.id && <input type="hidden" name="id" value={record.id} />}
       <FormGrid cols={2}>
-        <Field label="Full name" required><TextInput name="name" required defaultValue={record?.name} placeholder="e.g. John Kamau" /></Field>
+        <Field label="Full name" required><TextInput name="name" required defaultValue={record?.name} placeholder="e.g. John Smith" /></Field>
         <Field label="Role" required>
           <Select name="role_key" required defaultValue={record?.role_key || 'member'} options={roleOptions} placeholder="Select role" />
         </Field>

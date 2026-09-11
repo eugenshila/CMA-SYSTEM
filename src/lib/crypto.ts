@@ -74,7 +74,7 @@ export function generateOtp(length = 6): string {
 
 /** Human-friendly temporary password (used for first sign-in / admin reset). */
 export function generateTempPassword(): string {
-  const words = ['Cma', 'Kamakis', 'Nairobi', 'Grace', 'Faith', 'Hope', 'StMonica', 'Deanery'];
+  const words = ['Cma', 'Heritage', 'Meadow', 'Grace', 'Faith', 'Hope', 'StJoseph', 'Riverdale'];
   const word = words[crypto.randomBytes(1)[0] % words.length];
   const digits = crypto.randomInt(1000, 9999);
   const specials = ['!', '@', '#', '$'];

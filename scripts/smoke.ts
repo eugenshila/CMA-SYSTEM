@@ -5,10 +5,10 @@ const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.
 
 const CREDS: [string, string][] = [
   ['superadmin@cma.or.ke', 'Cma@Super2026'],
-  ['admin@stmonica.or.ke', 'Cma@Admin2026'],
-  ['treasurer@stmonica.or.ke', 'Cma@Treas2026'],
-  ['secretary@stmonica.or.ke', 'Cma@Sec2026'],
-  ['CMA/STM/0006', 'Member@2026'],
+  ['admin@stjosephmukasa.or.ke', 'Cma@Admin2026'],
+  ['treasurer@stjosephmukasa.or.ke', 'Cma@Treas2026'],
+  ['secretary@stjosephmukasa.or.ke', 'Cma@Sec2026'],
+  ['CMA/SJM/0006', 'Member@2026'],
 ];
 
 async function main() {

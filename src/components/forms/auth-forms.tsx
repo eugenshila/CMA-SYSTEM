@@ -13,11 +13,11 @@ type LoginResult = ActionResult & { requires2fa?: boolean; userId?: number; devC
 
 const DEMO_ACCOUNTS = [
   { label: 'Super Administrator', identifier: 'superadmin@cma.or.ke', password: 'Cma@Super2026' },
-  { label: 'Administrator', identifier: 'admin@stmonica.or.ke', password: 'Cma@Admin2026' },
-  { label: 'Treasurer', identifier: 'treasurer@stmonica.or.ke', password: 'Cma@Treas2026' },
-  { label: 'Secretary', identifier: 'secretary@stmonica.or.ke', password: 'Cma@Sec2026' },
-  { label: 'SDP / Sacco Officer', identifier: 'sacco@stmonica.or.ke', password: 'Cma@Sacco2026' },
-  { label: 'Ordinary member', identifier: '254791752384', password: 'Member@2026' },
+  { label: 'Administrator', identifier: 'admin@stjosephmukasa.or.ke', password: 'Cma@Admin2026' },
+  { label: 'Treasurer', identifier: 'treasurer@stjosephmukasa.or.ke', password: 'Cma@Treas2026' },
+  { label: 'Secretary', identifier: 'secretary@stjosephmukasa.or.ke', password: 'Cma@Sec2026' },
+  { label: 'SDP / Sacco Officer', identifier: 'sacco@stjosephmukasa.or.ke', password: 'Cma@Sacco2026' },
+  { label: 'Ordinary member', identifier: 'CMA/SJM/0006', password: 'Member@2026' },
 ];
 
 /* ------------------------------------------------------------------ *
