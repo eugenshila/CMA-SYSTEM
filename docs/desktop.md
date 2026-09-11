@@ -29,18 +29,57 @@ PGlite is real PostgreSQL 18 compiled to WebAssembly, exposed over the standard
 wire protocol via `@electric-sql/pglite-socket`, so migrations, extensions
 syntax and the `pg` driver behave exactly as in production.
 
-### Packaging: why the standalone server is unpacked from app.asar
+### Packaging: what has to be unpacked from app.asar
 
 The main process (and everything it loads — `desktop/*.cjs`, `db/migrations`,
 PGlite) runs from inside the `app.asar` archive, which Electron's patched `fs`
 reads natively. The spawned Next.js server is different: it runs as a plain
 Node.js child process (`ELECTRON_RUN_AS_NODE=1`), and plain Node **cannot read
-inside an asar archive**. The installers therefore ship the standalone build as
-real files under `app.asar.unpacked/.next/standalone/` (`asarUnpack` in
-`electron-builder.yml`), and `desktop/bootstrap.cjs` translates the path at
-runtime. `npm run desktop:smoke` guards this contract on every CI build —
-without it the installed app fails at startup with `MODULE_NOT_FOUND` and never
-reaches the login screen (the v1.0.1 bug).
+inside an asar archive**. Everything that child touches therefore has to exist
+as real files under `resources/app.asar.unpacked/`, which is what `asarUnpack`
+in `electron-builder.yml` does:
+
+| Unpacked entry        | Why the child needs it                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.next/standalone/**` | The server itself (`server.js`, the compiled routes, `required-server-files.json`).                                                          |
+| `node_modules/**`     | The server's runtime dependencies. **This one is easy to miss** — see below.                                                                 |
+
+Why `node_modules/**` is not optional: electron-builder ships production
+`node_modules` (package.json `dependencies`) at the **top level** of the app and
+silently drops *nested* `node_modules` directories — including
+`.next/standalone/node_modules`, the traced copy Next produces precisely so the
+standalone server is self-contained (`app-builder-lib`'s `AppFileWalker` skips
+every `*/node_modules` unless `includeSubNodeModules` is enabled, which it is
+not by default). So the unpacked standalone tree ships *without* any
+dependencies, and `server.js` can only resolve them by walking up to
+`app.asar.unpacked/node_modules`. That covers `next` itself plus the
+`serverExternalPackages` (`pg`, `pdfkit`, `exceljs`, `bcryptjs`, `qrcode`).
+
+`desktop/bootstrap.cjs` translates the in-archive path to its unpacked twin at
+runtime. `npm run desktop:smoke` guards both entries in CI, and its second boot
+reproduces the packaged layout exactly — standalone **without** nested
+`node_modules`, dependencies only in the unpacked top-level tree. Without the
+`node_modules` entry the installed app dies at startup and never reaches the
+login screen; that is the v1.0.1 bug:
+
+```
+Error: Cannot find module 'next'
+Require stack:
+- C:\Users\…\CMA System\resources\app.asar.unpacked\.next\standalone\server.js
+code: 'MODULE_NOT_FOUND'
+```
+
+### Packaging: keeping the repository out of the standalone output
+
+Next's file tracer (`@vercel/nft`) statically analyses every `require`/`fs`
+path it can see. A traced path built from `process.cwd()` cannot be resolved
+statically, so the tracer falls back to copying **the whole working
+directory** into `.next/standalone` — which put `.git`, the local
+`.pgdata-test` database (971 files, ~39 MB) and the sources into every
+installer. `src/lib/files.ts` therefore uses `path.resolve(UPLOAD_DIR)` rather
+than `path.resolve(process.cwd(), UPLOAD_DIR)` (identical at runtime — see the
+comment there). The smoke test fails if `.git`, `.pgdata-test` or `src` reappear
+inside `.next/standalone`.
 
 ## Prerequisites
 
@@ -60,6 +99,10 @@ npm run dist:dir      # unpacked build (fastest local smoke test)
 render the app icon → `electron-builder`. On Windows you get a per-user NSIS
 installer with a desktop shortcut and Start Menu entry.
 
+Packaging changes (`electron-builder.yml`, `desktop/`, `scripts/prepare-standalone.mjs`)
+only take effect when the installers are rebuilt, and an already-installed app
+does not update itself — reinstall the new build to pick them up.
+
 ## Verifying the desktop startup path
 
 ```bash
@@ -70,8 +113,12 @@ The smoke test boots the exact production stack (embedded PostgreSQL,
 migrations, first-run admin, spawned Next.js server) and verifies the login
 screen renders — once from the source tree and once against a simulated
 installed app (`app.asar` + `app.asar.unpacked`), reproducing the packaged
-layout where a plain Node child cannot read inside the archive. CI runs it on
-every platform before the installers are built and attached to a release.
+layout where a plain Node child cannot read inside the archive. The simulation
+is faithful in the way that matters: the unpacked standalone tree has **no**
+nested `node_modules`, and the dependencies exist only in the unpacked
+top-level `node_modules`, so a missing `asarUnpack: node_modules/**` fails here
+instead of in the field. CI runs it on every platform before the installers are
+built and attached to a release.
 
 ## Development
 
@@ -148,6 +195,15 @@ git push origin v1.1.0
 - **"...packed inside app.asar..."** — the installers were built without the
   `asarUnpack: .next/standalone/**` entry in `electron-builder.yml`; rebuild
   after restoring it (CI's `npm run desktop:smoke` step catches this).
+- **`Error: Cannot find module 'next'` / `MODULE_NOT_FOUND` in `desktop.log`** —
+  the web server started but could not load its dependencies: `asarUnpack` is
+  missing `node_modules/**`, so the unpacked standalone tree has no
+  `node_modules` next to it (the v1.0.1 bug). Restore the entry, rebuild the
+  installers and **reinstall** — an already-installed app does not fix itself.
+- **Installer is unexpectedly huge** — the file tracer pulled the repository
+  into `.next/standalone` (`.git`, `.pgdata-test`, `src`). Check
+  `du -sh .next/standalone` and avoid `process.cwd()` in traced server code;
+  the smoke test's "no stray repository files" check catches this.
 - **Blank window** — also check `stderr` when running `npm run desktop:dev`.
 - **Port conflicts** — all ports (database and web) are ephemeral and bound to
   `127.0.0.1`, so conflicts are avoided automatically.

@@ -20,19 +20,34 @@ files:
   - db/migrations/**
   - package.json
 
-# PGlite loads a WebAssembly binary and its native add-ons; unpack so they are
-# readable as real files from the asar archive.
+# The packaged app must expose REAL FILES for everything a plain Node.js child
+# process reads. Electron's patched `fs` can read inside app.asar, but the
+# spawned Next.js server (ELECTRON_RUN_AS_NODE=1, see desktop/bootstrap.cjs)
+# cannot — so two trees have to be unpacked:
 #
-# The standalone Next.js server must ALSO be unpacked: it is spawned as a plain
-# Node.js child process (ELECTRON_RUN_AS_NODE), which cannot read inside
-# app.asar — without this entry the installed app fails at startup with
-# MODULE_NOT_FOUND and never reaches the login screen. desktop/bootstrap.cjs
-# resolves the app.asar.unpacked path at runtime; scripts/desktop-smoke.mjs
-# guards this contract (run via `npm run desktop:smoke`).
+#   1. `.next/standalone/**` — the server itself.
+#   2. `node_modules/**`     — its runtime dependencies.
+#
+# (2) is easy to get wrong. electron-builder puts production `node_modules`
+# (package.json `dependencies`) at the TOP level of the app and *skips nested*
+# node_modules directories — including `.next/standalone/node_modules`, the
+# traced copy Next emits for exactly this purpose (app-builder-lib's
+# AppFileWalker drops any `*/node_modules` unless `includeSubNodeModules` is
+# true, which it is not by default). Unpacking the top-level tree means the
+# child resolves `next` — plus the `serverExternalPackages` (`pg`, `pdfkit`,
+# `exceljs`, `bcryptjs`, `qrcode`) — by walking up from
+# `app.asar.unpacked/.next/standalone/` to `app.asar.unpacked/node_modules`.
+# Without it the installed app dies at startup with
+# `Error: Cannot find module 'next'` and never reaches the login screen.
+#
+# `node_modules/**` subsumes the previous narrower entries
+# (`node_modules/@electric-sql/**`, `**/*.wasm`, `**/*.node`): PGlite's
+# WebAssembly binary and native add-ons are unpacked as part of the whole tree.
+#
+# scripts/desktop-smoke.mjs guards both entries and reproduces this exact
+# packaged layout — run `npm run desktop:smoke`.
 asarUnpack:
-  - node_modules/@electric-sql/**
-  - node_modules/**/*.wasm
-  - node_modules/**/*.node
+  - node_modules/**
   - .next/standalone/**
 
 extraMetadata:
