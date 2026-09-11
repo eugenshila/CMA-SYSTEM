@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
   const doc = await one<any>('SELECT * FROM member_documents WHERE id = $1 AND deleted_at IS NULL', [id]);
   if (!doc) return Response.json({ error: 'Document not found' }, { status: 404 });
 
-  // Members may only ever open their OWN documents. The member role holds
-  // documents.view / members.view for its self-service screens, so those
-  // permissions alone must NOT grant access to other members' files — only
-  // staff (non-member roles) with those permissions may open any document.
+  // Members may only ever open their OWN documents. Their self-service
+  // documents.view permission must never grant access to another member's
+  // files — only staff (non-member roles) with the relevant permission may
+  // open documents across the parish.
   const isOwn = user.member_id === Number(doc.member_id);
   if (!isOwn && (!isStaff(user) || (!can(user, 'documents.view') && !can(user, 'members.view')))) {
     return Response.json({ error: 'You do not have permission to open this document.' }, { status: 403 });

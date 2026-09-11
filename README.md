@@ -19,6 +19,7 @@ identifiers are stored encrypted, and every financial transaction is permanently
 - **SDP / Sacco** — savings deposits, share capital, certificates, dividends, statements
 - **Loans** — configurable products, guarantor approval, amortisation schedules, penalties
 - **Payments** — M-Pesa (Daraja), bank, cash and manual entry with official receipts
+- **Meetings & communication** — attendance, handwritten-minutes OCR drafts, Word-compatible / PDF minutes, secure WhatsApp sharing, meeting reminders and bulk SMS
 - **Reports & exports** — report hub with PDF / Excel output and branded letterheads
 - **Administration** — role-based access control, audit trail, system settings
 
@@ -65,6 +66,21 @@ Organisation identity (name, parish structure, currency, **logo** and stamp) is 
 **Settings → Organisation** and printed on receipts, statements and reports. When the uploaded
 logo cannot be loaded the UI degrades gracefully to the bundled CMA crest and then to a
 monogram badge — no broken-image icons anywhere.
+
+### Meeting minutes, SMS and WhatsApp
+
+A Secretary can open a meeting and use **Upload & read** to attach a handwritten scan. OCR is
+optional: configure either Google Cloud Vision or a parish-hosted generic OCR endpoint under
+**Settings → Minutes OCR**. The extracted text is always a draft; it must be reviewed before it
+can be published. The resulting minutes can be downloaded as PDF or an editable Microsoft Word (.docx) file.
+Publishing produces an expiring, unguessable PDF link for WhatsApp/SMS distribution and records
+the distribution in the audit trail.
+
+Configure bulk delivery in **Settings → Notifications**. SMS supports Africa's Talking, Twilio
+and a generic HTTPS gateway. WhatsApp uses the Meta Cloud API. Real providers require valid
+credentials, member consent and (for WhatsApp messages sent outside the 24-hour service window)
+an approved Meta template. Until a provider is configured, the system keeps the in-system message
+and records the external delivery as skipped rather than pretending it was sent.
 
 ## Deploying to Railway
 

@@ -15,7 +15,7 @@ import {
   Th,
 } from '../ui/primitives';
 import { SearchInput, SelectFilter } from '../ui/client';
-import { can } from '@/lib/rbac';
+import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { getSetting } from '@/lib/settings';
@@ -39,6 +39,8 @@ export default async function CaseListPage({
   const meta = CASE_META[type];
   if (!can(user, `${meta.permission}.view`)) redirect('/dashboard');
 
+  const memberView = isMember(user);
+  if (memberView && !user.member_id) redirect('/dashboard');
   const Icon = ICONS[type];
   const table = CASE_TABLES[type];
   const refCol = type === 'project' ? 'project_no' : 'case_no';
@@ -47,7 +49,11 @@ export default async function CaseListPage({
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
-  const scopeClause = user.scope_parish_id ? `AND c.parish_id = ${Number(user.scope_parish_id)}` : '';
+  // Members may only see support requests applicable to their own parish.
+  // Staff retain their configured parish scope (or cross-parish view).
+  const scopeClause = memberView
+    ? `AND (c.parish_id = (SELECT parish_id FROM members WHERE id = ${Number(user.member_id)}) OR c.parish_id IS NULL)`
+    : user.scope_parish_id ? `AND c.parish_id = ${Number(user.scope_parish_id)}` : '';
   const params: any[] = [];
   const where: string[] = ['1=1'];
   if (status) {
@@ -73,12 +79,17 @@ export default async function CaseListPage({
   const expectedCol = type === 'funeral' ? 'COALESCE(c.total_expected,0)' : 'COALESCE(c.target_amount,0)';
   const titleCol =
     type === 'welfare' ? 'c.beneficiary_name' : type === 'funeral' ? 'c.deceased_name' : type === 'wedding' ? 'c.spouse_name' : 'c.name';
+  const memberPaymentColumn = memberView
+    ? type === 'project'
+      ? `(SELECT COALESCE(SUM(pc.amount_paid),0) FROM project_contributions pc WHERE pc.project_id = c.id AND pc.member_id = ${Number(user.member_id)}) AS my_paid,`
+      : `(SELECT COALESCE(SUM(cp.amount),0) FROM ${table.payments} cp WHERE cp.${type}_case_id = c.id AND cp.member_id = ${Number(user.member_id)}) AS my_paid,`
+    : 'NULL AS my_paid,';
 
   const [rows, countRow, totals, categories] = await Promise.all([
     query<any>(
       `SELECT c.id, c.${refCol} AS ref, c.status, c.amount_per_member, c.amount_collected, c.amount_disbursed,
               c.deadline, ${keyDate} AS key_date, ${expectedCol} AS expected, ${titleCol} AS title,
-              ${memberCols} p.name AS parish_name
+              ${memberPaymentColumn} ${memberCols} p.name AS parish_name
          FROM ${table.cases} c
          ${memberJoin}
          LEFT JOIN parishes p ON p.id = c.parish_id
@@ -114,7 +125,9 @@ export default async function CaseListPage({
     <div className="space-y-5">
       <SectionHeading
         title={meta.plural}
-        subtitle="Open a case, invite the members in scope to contribute, track collection and disburse the funds."
+        subtitle={memberView
+          ? 'Your support contribution obligations. Other members’ identities and payment records are private.'
+          : 'Open a case, invite the members in scope to contribute, track collection and disburse the funds.'}
         action={
           <>
             {can(user, `${meta.permission}.create`) ? (
@@ -122,25 +135,29 @@ export default async function CaseListPage({
                 <Plus className="h-4 w-4" /> {meta.newLabel}
               </Link>
             ) : null}
-            <Link href={`/api/exports/cases?type=${type}&format=excel`} className="btn btn-outline btn-sm">
-              <Download className="h-4 w-4" /> Excel
-            </Link>
+            {!memberView ? (
+              <Link href={`/api/exports/cases?type=${type}&format=excel`} className="btn btn-outline btn-sm">
+                <Download className="h-4 w-4" /> Excel
+              </Link>
+            ) : null}
           </>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label={`${meta.label}s recorded`} value={String(totals?.total || 0)} tone="navy" icon={<Users className="h-4 w-4" />} />
-        <StatCard label="Open now" value={String(totals?.open || 0)} tone="blue" icon={<Inbox className="h-4 w-4" />} />
-        <StatCard label="Total collected" value={money(collected)} tone="green" icon={<Wallet className="h-4 w-4" />} />
-        <StatCard
-          label="Available to disburse"
-          value={money(balance)}
-          tone="gold"
-          icon={<ArrowUpRight className="h-4 w-4" />}
-          sub={`${money(disbursed)} already disbursed`}
-        />
-      </div>
+      {!memberView ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label={`${meta.label}s recorded`} value={String(totals?.total || 0)} tone="navy" icon={<Users className="h-4 w-4" />} />
+          <StatCard label="Open now" value={String(totals?.open || 0)} tone="blue" icon={<Inbox className="h-4 w-4" />} />
+          <StatCard label="Total collected" value={money(collected)} tone="green" icon={<Wallet className="h-4 w-4" />} />
+          <StatCard
+            label="Available to disburse"
+            value={money(balance)}
+            tone="gold"
+            icon={<ArrowUpRight className="h-4 w-4" />}
+            sub={`${money(disbursed)} already disbursed`}
+          />
+        </div>
+      ) : null}
 
       {type === 'funeral' && insurance?.title ? (
         <Card>
@@ -221,11 +238,20 @@ export default async function CaseListPage({
               <thead>
                 <tr>
                   <Th>Reference</Th>
-                  <Th>{type === 'project' ? 'Project' : 'Concerning'}</Th>
-                  {type !== 'project' ? <Th>Member</Th> : null}
-                  <Th align="right">Per member</Th>
-                  <Th align="right">Collected</Th>
-                  <Th className="w-40">Progress</Th>
+                  <Th>{memberView ? 'Support contribution' : type === 'project' ? 'Project' : 'Concerning'}</Th>
+                  {!memberView && type !== 'project' ? <Th>Member</Th> : null}
+                  <Th align="right">{memberView ? 'Required' : 'Per member'}</Th>
+                  {memberView ? (
+                    <>
+                      <Th align="right">My paid</Th>
+                      <Th align="right">My balance</Th>
+                    </>
+                  ) : (
+                    <>
+                      <Th align="right">Collected</Th>
+                      <Th className="w-40">Progress</Th>
+                    </>
+                  )}
                   <Th>Deadline</Th>
                   <Th>Status</Th>
                   <Th align="right">Action</Th>
@@ -235,26 +261,37 @@ export default async function CaseListPage({
                 {rows.map((r) => {
                   const collectedRow = num(r.amount_collected);
                   const expectedRow = num(r.expected);
+                  const myPaid = num(r.my_paid);
+                  const myBalance = Math.max(0, num(r.amount_per_member) - myPaid);
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/70">
                       <Td className="whitespace-nowrap font-mono text-xs">{r.ref}</Td>
                       <Td>
-                        <div className="font-medium text-navy-900">{caseTitle(type, { ...r, full_name: r.member_name, name: r.title })}</div>
+                        <div className="font-medium text-navy-900">{memberView ? `CMA ${meta.label.toLowerCase()} support` : caseTitle(type, { ...r, full_name: r.member_name, name: r.title })}</div>
                         <div className="text-[11px] text-slate-500">
-                          {r.parish_name || 'Parish'} · opened {fmtDate(r.key_date)}
+                          {memberView ? 'Your contribution obligation' : `${r.parish_name || 'Parish'} · opened ${fmtDate(r.key_date)}`}
                         </div>
                       </Td>
-                      {type !== 'project' ? (
+                      {!memberView && type !== 'project' ? (
                         <Td>
                           <Link className="font-medium text-navy-800 hover:text-gold-700" href={`/members/${r.member_id}`}>{r.member_name}</Link>
                           <div className="text-[11px] text-slate-500">{r.membership_no}</div>
                         </Td>
                       ) : null}
                       <Td align="right">{money(num(r.amount_per_member))}</Td>
-                      <Td align="right" className="font-semibold">{money(collectedRow)}</Td>
-                      <Td>
-                        <ProgressBar value={collectedRow} total={expectedRow || collectedRow || 1} label={expectedRow ? undefined : 'no target set'} />
-                      </Td>
+                      {memberView ? (
+                        <>
+                          <Td align="right" className={myPaid > 0 ? 'font-semibold text-emerald-700' : 'text-slate-400'}>{money(myPaid)}</Td>
+                          <Td align="right" className={myBalance > 0 ? 'font-semibold text-amber-700' : 'text-slate-400'}>{myBalance > 0 ? money(myBalance) : '—'}</Td>
+                        </>
+                      ) : (
+                        <>
+                          <Td align="right" className="font-semibold">{money(collectedRow)}</Td>
+                          <Td>
+                            <ProgressBar value={collectedRow} total={expectedRow || collectedRow || 1} label={expectedRow ? undefined : 'no target set'} />
+                          </Td>
+                        </>
+                      )}
                       <Td className="whitespace-nowrap text-xs">
                         {r.deadline ? (
                           <span className={isPast(r.deadline) && r.status === 'open' ? 'font-semibold text-red-600' : 'text-slate-600'}>

@@ -402,14 +402,38 @@ export async function saveNotificationSettingsAction(_prev: any, formData: FormD
   const user = await requireUser();
   if (!can(user, 'settings.update')) return { ok: false, error: 'You do not have permission to change notification settings.' };
   const before = await getSetting('notifications');
+  const smsProvider = String(formData.get('sms_provider') || before.sms_provider || 'none');
+  const smsApiUrl = String(formData.get('sms_api_url') || '').trim();
+  if (smsApiUrl && !/^https:\/\//i.test(smsApiUrl)) {
+    return { ok: false, error: 'The generic SMS endpoint must use HTTPS.' };
+  }
+  if (smsProvider === 'generic' && !smsApiUrl) {
+    return { ok: false, error: 'A Generic HTTP SMS provider needs an HTTPS endpoint URL.' };
+  }
+  const whatsappProvider = String(formData.get('whatsapp_provider') || before.whatsapp_provider || 'meta');
+  if (!['none', 'meta'].includes(whatsappProvider)) {
+    return { ok: false, error: 'Choose a supported WhatsApp provider.' };
+  }
+  const channels = {
+    ...(before.channels || {}),
+    in_system: formData.get('in_system_enabled') === 'on',
+    sms: formData.get('sms_enabled') === 'on',
+    email: formData.get('email_enabled') === 'on',
+    whatsapp: formData.get('whatsapp_enabled') === 'on',
+  };
   const payload = {
     ...before,
-    sms_enabled: formData.get('sms_enabled') === 'on',
-    email_enabled: formData.get('email_enabled') === 'on',
-    whatsapp_enabled: formData.get('whatsapp_enabled') === 'on',
-    in_system_enabled: formData.get('in_system_enabled') === 'on',
-    sms_provider: String(formData.get('sms_provider') || before.sms_provider || 'none'),
+    // Keep legacy flat flags for already deployed installations and use the
+    // nested flags consumed by the notification dispatcher going forward.
+    channels,
+    sms_enabled: channels.sms,
+    email_enabled: channels.email,
+    whatsapp_enabled: channels.whatsapp,
+    in_system_enabled: channels.in_system,
+    sms_provider: smsProvider,
     sms_sender_id: String(formData.get('sms_sender_id') || ''),
+    sms_username: String(formData.get('sms_username') || ''),
+    sms_api_url: smsApiUrl,
     sms_api_key: String(formData.get('sms_api_key') || '').trim() || before.sms_api_key || '',
     sms_api_secret: String(formData.get('sms_api_secret') || '').trim() || before.sms_api_secret || '',
     smtp_host: String(formData.get('smtp_host') || ''),
@@ -417,6 +441,7 @@ export async function saveNotificationSettingsAction(_prev: any, formData: FormD
     smtp_user: String(formData.get('smtp_user') || ''),
     smtp_password: String(formData.get('smtp_password') || '').trim() || before.smtp_password || '',
     smtp_from: String(formData.get('smtp_from') || ''),
+    whatsapp_provider: whatsappProvider,
     whatsapp_token: String(formData.get('whatsapp_token') || '').trim() || before.whatsapp_token || '',
     whatsapp_phone_id: String(formData.get('whatsapp_phone_id') || ''),
   };
@@ -433,7 +458,52 @@ export async function saveNotificationSettingsAction(_prev: any, formData: FormD
     severity: 'warning',
   });
   revalidatePath('/admin/settings');
+  revalidatePath('/settings');
   return { ok: true, message: 'Notification settings saved.' };
+}
+
+export async function saveMinutesOcrSettingsAction(_prev: any, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  if (!can(user, 'settings.update')) return { ok: false, error: 'You do not have permission to change OCR settings.' };
+
+  const before = await getSetting<any>('minutes_ocr');
+  const provider = String(formData.get('provider') || 'none').trim().toLowerCase();
+  if (!['none', 'google_vision', 'generic'].includes(provider)) {
+    return { ok: false, error: 'Choose a supported OCR provider.' };
+  }
+  const apiUrl = String(formData.get('api_url') || '').trim();
+  if (apiUrl && !/^https:\/\//i.test(apiUrl)) {
+    return { ok: false, error: 'The OCR endpoint must use HTTPS.' };
+  }
+  if (provider === 'generic' && !apiUrl) {
+    return { ok: false, error: 'A Generic OCR provider needs an HTTPS endpoint URL.' };
+  }
+
+  const apiKey = String(formData.get('api_key') || '').trim();
+  const payload = {
+    provider,
+    api_url: apiUrl,
+    api_key: apiKey || before.api_key || '',
+  };
+  await setSetting('minutes_ocr', payload, {
+    updatedBy: user.id,
+    groupName: 'meetings',
+    description: 'Optional OCR provider for scanned handwritten meeting minutes.',
+    isSecret: true,
+  });
+  await logAudit({
+    userId: user.id,
+    userName: user.name,
+    action: 'settings.updated',
+    entityType: 'system_settings',
+    entityLabel: 'minutes_ocr',
+    description: `Meeting minutes OCR configuration updated (${provider})`,
+    oldValues: { provider: before.provider || 'none', configured: Boolean(before.api_key) },
+    newValues: { provider, endpoint_configured: Boolean(apiUrl), key_configured: Boolean(payload.api_key) },
+    severity: 'warning',
+  });
+  revalidatePath('/settings');
+  return { ok: true, message: 'Meeting-minutes OCR settings saved.' };
 }
 
 export async function saveGuarantorSettingsAction(_prev: any, formData: FormData): Promise<ActionResult> {

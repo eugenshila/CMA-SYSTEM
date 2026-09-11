@@ -1,8 +1,8 @@
 'use client';
 
 import { useActionState, useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, CalendarPlus, Pencil, ClipboardCheck, CheckCheck, QrCode, Megaphone, Send, Plus } from 'lucide-react';
-import { Modal, toastSuccess, toastError } from '@/components/ui/client';
+import { Loader2, Save, CalendarPlus, Pencil, ClipboardCheck, CheckCheck, QrCode, Megaphone, Send, Plus, Upload, FileText, FileScan, Download, Share2, BellRing } from 'lucide-react';
+import { Modal, toastSuccess, toastError, CopyButton } from '@/components/ui/client';
 import { Field, FormGrid, Select, TextInput, TextArea, Checkbox, ResultAlert } from './fields';
 import {
   saveMeetingAction,
@@ -12,6 +12,10 @@ import {
   selfCheckInAction,
   saveNoticeAction,
   sendBulkMessageAction,
+  uploadMeetingMinutesAction,
+  saveMeetingMinutesAction,
+  publishMeetingMinutesAction,
+  sendMeetingReminderAction,
 } from '@/server/actions/records';
 import { isoDate } from '@/lib/dates';
 import { MEETING_TYPES, MEETING_STATUSES, ATTENDANCE_STATUSES } from '@/lib/meeting-meta';
@@ -149,6 +153,182 @@ export function MeetingStatusSelect({ meetingId, current }: { meetingId: number;
         } else toastError(res.error || 'Could not update status');
       }}
     />
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Secretary minutes: scan → review → publish / distribute
+ * ------------------------------------------------------------------ */
+function ocrStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    not_uploaded: 'No scan uploaded',
+    needs_review: 'OCR draft needs review',
+    completed: 'Reviewed draft',
+    not_configured: 'OCR not configured',
+    failed: 'OCR needs attention',
+  };
+  return labels[status || ''] || 'Draft';
+}
+
+export function MeetingReminderButton({ meetingId }: { meetingId: number }) {
+  const [busy, setBusy] = useState(false);
+  const [whatsApp, setWhatsApp] = useState(false);
+  return (
+    <div className="flex items-center gap-1">
+      <label className="hidden items-center gap-1 text-[11px] text-slate-500 xl:flex">
+        <input type="checkbox" checked={whatsApp} onChange={(e) => setWhatsApp(e.target.checked)} className="checkbox" /> WhatsApp
+      </label>
+      <button
+        type="button"
+        className="btn btn-outline btn-sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          const result = await sendMeetingReminderAction(meetingId, whatsApp ? ['in_system', 'sms', 'whatsapp'] : ['in_system', 'sms']);
+          setBusy(false);
+          if (result.ok) toastSuccess(result.message || 'Reminder sent');
+          else toastError(result.error || 'Could not send reminder');
+        }}
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} Send reminder
+      </button>
+    </div>
+  );
+}
+
+export function MeetingMinutesPanel({ meeting, canEdit }: { meeting: any; canEdit: boolean }) {
+  const [uploadState, uploadAction, uploading] = useActionState(uploadMeetingMinutesAction as any, undefined as ActionResult | undefined);
+  const [saveState, saveAction, saving] = useActionState(saveMeetingMinutesAction as any, undefined as ActionResult | undefined);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [publishMessage, setPublishMessage] = useState('');
+  const [shareUrl, setShareUrl] = useState('');
+  const [sendSms, setSendSms] = useState(true);
+  const [sendWhatsApp, setSendWhatsApp] = useState(false);
+
+  useEffect(() => {
+    if (uploadState?.ok || saveState?.ok) window.setTimeout(() => window.location.reload(), 350);
+  }, [uploadState?.ok, saveState?.ok]);
+
+  const pdfUrl = `/api/documents/meeting-minutes/${meeting.id}?format=pdf`;
+  const wordUrl = `/api/documents/meeting-minutes/${meeting.id}?format=word`;
+  const sourceUrl = `/api/documents/meeting-minutes/${meeting.id}?format=source`;
+  const published = Boolean(meeting.minutes_published_at);
+
+  async function publish() {
+    setPublishing(true);
+    setPublishError('');
+    setPublishMessage('');
+    const channels = ['in_system', ...(sendSms ? ['sms'] : []), ...(sendWhatsApp ? ['whatsapp'] : [])];
+    const result = await publishMeetingMinutesAction(Number(meeting.id), channels);
+    setPublishing(false);
+    if (!result.ok) {
+      setPublishError(result.error || 'Could not publish minutes.');
+      return;
+    }
+    setPublishMessage(result.message || 'Minutes published.');
+    setShareUrl(String(result.data?.shareUrl || ''));
+    toastSuccess('Minutes published');
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-navy-900">Official minutes</p>
+          <p className="text-xs text-slate-500">
+            {published ? 'Published to meeting members.' : canEdit ? 'Draft — review before publishing.' : 'Minutes are not yet published.'}
+          </p>
+        </div>
+        {meeting.minutes ? (
+          <div className="flex flex-wrap gap-2">
+            <a href={pdfUrl} target="_blank" className="btn btn-outline btn-sm"><FileText className="h-4 w-4" /> PDF</a>
+            {canEdit ? <a href={wordUrl} className="btn btn-outline btn-sm"><Download className="h-4 w-4" /> Word</a> : null}
+          </div>
+        ) : null}
+      </div>
+
+      {canEdit ? (
+        <>
+          <form action={uploadAction} className="rounded-xl border border-dashed border-navy-200 bg-navy-50/40 p-3">
+            <input type="hidden" name="meeting_id" value={meeting.id} />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <label className="label">Handwritten minutes scan</label>
+                <input name="file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,.jpg,.jpeg,.png,.webp,.gif,.pdf,.txt" className="input !py-1.5" />
+                <p className="mt-1 text-[11px] text-slate-500">JPG, PNG, WebP, PDF or text, up to 10 MB. OCR creates a draft; always check names, figures and decisions.</p>
+              </div>
+              <button type="submit" className="btn btn-outline btn-sm shrink-0" disabled={uploading}>
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileScan className="h-4 w-4" />} Upload & read
+              </button>
+            </div>
+            <ResultAlert result={uploadState} />
+          </form>
+
+          {meeting.minutes_file_name ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <FileScan className="h-4 w-4 text-navy-700" />
+              <span className="min-w-0 flex-1 truncate">Source scan: {meeting.minutes_file_name}</span>
+              <span className="badge badge-gold">{ocrStatusLabel(meeting.minutes_ocr_status)}</span>
+              <a href={sourceUrl} target="_blank" className="btn btn-ghost btn-sm">Open scan</a>
+            </div>
+          ) : null}
+          {meeting.minutes_ocr_error ? <p className="text-xs text-amber-700">{meeting.minutes_ocr_error}</p> : null}
+
+          <form action={saveAction} className="space-y-2">
+            <input type="hidden" name="meeting_id" value={meeting.id} />
+            <label className="label">Reviewed minutes</label>
+            <textarea
+              name="minutes"
+              defaultValue={meeting.minutes || ''}
+              rows={14}
+              placeholder="Upload a scan to create a draft, or type / paste the official minutes here…"
+              className="input resize-y leading-6"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save reviewed draft
+              </button>
+              {published ? <span className="text-xs text-amber-700">Saving changes will revoke the current sharing link until you publish again.</span> : null}
+            </div>
+            <ResultAlert result={saveState} />
+          </form>
+
+          {meeting.minutes ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900">Publish & distribute</p>
+                  <p className="text-xs text-emerald-800">A 90-day secure PDF link is created for WhatsApp and SMS. Members also receive an in-system notice.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
+                  <label className="flex items-center gap-1.5"><input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} className="checkbox" /> SMS</label>
+                  <label className="flex items-center gap-1.5"><input type="checkbox" checked={sendWhatsApp} onChange={(e) => setSendWhatsApp(e.target.checked)} className="checkbox" /> WhatsApp</label>
+                  <button type="button" className="btn btn-success btn-sm" disabled={publishing} onClick={publish}>
+                    {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Publish minutes
+                  </button>
+                </div>
+              </div>
+              {publishError ? <p className="mt-2 text-xs font-medium text-red-700">{publishError}</p> : null}
+              {publishMessage ? <p className="mt-2 text-xs font-medium text-emerald-800">{publishMessage}</p> : null}
+              {shareUrl ? (
+                <div className="mt-3 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-white p-2 sm:flex-row sm:items-center">
+                  <code className="min-w-0 flex-1 break-all text-[11px] text-slate-600">{shareUrl}</code>
+                  <div className="flex shrink-0 gap-1">
+                    <CopyButton value={shareUrl} label="Copy link" />
+                    <a href={`https://wa.me/?text=${encodeURIComponent(`CMA meeting minutes: ${shareUrl}`)}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm"><Share2 className="h-3.5 w-3.5" /> WhatsApp</a>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : published && meeting.minutes ? (
+        <p className="whitespace-pre-line text-sm leading-6 text-slate-700">{meeting.minutes}</p>
+      ) : (
+        <p className="text-sm text-slate-500">The secretary has not published the minutes yet.</p>
+      )}
+    </div>
   );
 }
 

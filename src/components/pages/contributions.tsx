@@ -17,7 +17,7 @@ import {
 } from '../ui/primitives';
 import { SearchInput, SelectFilter } from '../ui/client';
 import { BarChartCard, DonutChartCard } from '../charts';
-import { can } from '@/lib/rbac';
+import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { getContributionSettings } from '@/lib/settings';
@@ -44,6 +44,12 @@ export default async function ContributionsPage({
 }) {
   if (!can(user, 'contributions.view')) redirect('/dashboard');
 
+  // Ordinary members have a self-service contribution view. Their role has
+  // contributions.view so the navigation remains available, but every query
+  // below must be tied to their linked member record.
+  const ownOnly = isMember(user);
+  if (ownOnly && !user.member_id) redirect('/dashboard');
+
   const settings = await getContributionSettings();
   const period = String(sp.period || periodKey(new Date()));
   const status = String(sp.status || '');
@@ -53,9 +59,13 @@ export default async function ContributionsPage({
   const page = Math.max(1, Number(sp.page || 1));
   const offset = (page - 1) * PER_PAGE;
 
-  const scope = user.scope_parish_id ? `AND m.parish_id = ${Number(user.scope_parish_id)}` : '';
+  const scope = !ownOnly && user.scope_parish_id ? `AND m.parish_id = ${Number(user.scope_parish_id)}` : '';
   const params: any[] = [period];
   const where = [`mc.period = $1`];
+  if (ownOnly) {
+    params.push(Number(user.member_id));
+    where.push(`mc.member_id = $${params.length}`);
+  }
   if (status) {
     params.push(status);
     where.push(`mc.status = $${params.length}`);
@@ -110,9 +120,9 @@ export default async function ContributionsPage({
               COALESCE(SUM(mc.amount_paid),0)::float AS collected,
               COALESCE(SUM(mc.amount_due),0)::float AS expected
          FROM member_contributions mc JOIN members m ON m.id = mc.member_id
-        WHERE mc.period = ANY($1::text[]) ${scope}
+        WHERE mc.period = ANY($1::text[]) ${ownOnly ? 'AND mc.member_id = $2' : scope}
         GROUP BY mc.period ORDER BY mc.period`,
-      [trendPeriods],
+      ownOnly ? [trendPeriods, Number(user.member_id)] : [trendPeriods],
     ),
     query<any>(
       `SELECT initcap(mc.status) AS label, count(*)::int AS value
@@ -126,20 +136,22 @@ export default async function ContributionsPage({
               count(*)::int AS months, max(mc.period) AS last_period
          FROM member_contributions mc JOIN members m ON m.id = mc.member_id
          LEFT JOIN small_christian_communities s ON s.id = m.scc_id
-        WHERE mc.status IN ('unpaid','partial','overdue') AND mc.exempted = FALSE ${scope}
+        WHERE mc.status IN ('unpaid','partial','overdue') AND mc.exempted = FALSE ${ownOnly ? 'AND mc.member_id = $1' : scope}
         GROUP BY m.id, m.full_name, m.membership_no, s.name
         ORDER BY outstanding DESC LIMIT 10`,
+      ownOnly ? [Number(user.member_id)] : [],
     ),
-    query<any>(
-      `SELECT c.id, c.name FROM churches c ${user.scope_parish_id ? `WHERE c.parish_id = ${Number(user.scope_parish_id)}` : ''} ORDER BY c.name`,
-    ),
-    query<any>(
-      `SELECT s.id, s.name FROM small_christian_communities s ${churchId ? `WHERE s.church_id = ${churchId}` : user.scope_parish_id ? `JOIN churches c ON c.id = s.church_id WHERE c.parish_id = ${Number(user.scope_parish_id)}` : ''} ORDER BY s.name`,
-    ),
-    query<any>('SELECT id, name FROM parishes ORDER BY name'),
+    ownOnly
+      ? Promise.resolve([] as any[])
+      : query<any>(`SELECT c.id, c.name FROM churches c ${user.scope_parish_id ? `WHERE c.parish_id = ${Number(user.scope_parish_id)}` : ''} ORDER BY c.name`),
+    ownOnly
+      ? Promise.resolve([] as any[])
+      : query<any>(`SELECT s.id, s.name FROM small_christian_communities s ${churchId ? `WHERE s.church_id = ${churchId}` : user.scope_parish_id ? `JOIN churches c ON c.id = s.church_id WHERE c.parish_id = ${Number(user.scope_parish_id)}` : ''} ORDER BY s.name`),
+    ownOnly ? Promise.resolve([] as any[]) : query<any>('SELECT id, name FROM parishes ORDER BY name'),
     query<any>(
       `SELECT m.id, m.full_name, m.membership_no, m.exemption_reason FROM members m
-        WHERE m.deleted_at IS NULL AND m.exempt_monthly = TRUE ${scope} ORDER BY m.full_name LIMIT 50`,
+        WHERE m.deleted_at IS NULL AND m.exempt_monthly = TRUE ${ownOnly ? 'AND m.id = $1' : scope} ORDER BY m.full_name LIMIT 50`,
+      ownOnly ? [Number(user.member_id)] : [],
     ),
   ]);
 
@@ -157,13 +169,17 @@ export default async function ContributionsPage({
     <div className="space-y-5">
       <SectionHeading
         title="Monthly contributions"
-        subtitle={`${periodLabel(period)} · ${money(settings.monthly_amount)} per member, due on day ${settings.due_day}${settings.penalty_enabled ? ` · penalty ${money(settings.penalty_amount)} after ${settings.penalty_after_days} days` : ''}`}
+        subtitle={ownOnly
+          ? `${periodLabel(period)} · Your contribution is ${money(settings.monthly_amount)}, due on day ${settings.due_day}${settings.penalty_enabled ? ` · penalty ${money(settings.penalty_amount)} after ${settings.penalty_after_days} days` : ''}`
+          : `${periodLabel(period)} · ${money(settings.monthly_amount)} per member, due on day ${settings.due_day}${settings.penalty_enabled ? ` · penalty ${money(settings.penalty_amount)} after ${settings.penalty_after_days} days` : ''}`}
         action={
           <>
             <PeriodSwitcher period={period} />
-            <Link href={`/api/exports/contributions?period=${period}&format=excel`} className="btn btn-outline btn-sm">
-              <Download className="h-4 w-4" /> Export
-            </Link>
+            {!ownOnly ? (
+              <Link href={`/api/exports/contributions?period=${period}&format=excel`} className="btn btn-outline btn-sm">
+                <Download className="h-4 w-4" /> Export
+              </Link>
+            ) : null}
           </>
         }
       />
@@ -229,7 +245,7 @@ export default async function ContributionsPage({
             subtitle={`${total} record${total === 1 ? '' : 's'}`}
             action={
               <div className="flex flex-wrap items-center gap-2">
-                <SearchInput param="search" placeholder="Search member…" className="w-44 sm:w-56" extraParams={{ period }} />
+                {!ownOnly ? <SearchInput param="search" placeholder="Search member…" className="w-44 sm:w-56" extraParams={{ period }} /> : null}
                 <SelectFilter
                   param="status"
                   placeholder="All statuses"
@@ -242,18 +258,22 @@ export default async function ContributionsPage({
                     { value: 'exempted', label: 'Exempted' },
                   ]}
                 />
-                <SelectFilter
-                  param="church_id"
-                  placeholder="All churches"
-                  className="w-44"
-                  options={churches.map((c: any) => ({ value: String(c.id), label: c.name }))}
-                />
-                <SelectFilter
-                  param="scc_id"
-                  placeholder="All SCCs"
-                  className="w-44"
-                  options={sccs.map((s: any) => ({ value: String(s.id), label: s.name }))}
-                />
+                {!ownOnly ? (
+                  <>
+                    <SelectFilter
+                      param="church_id"
+                      placeholder="All churches"
+                      className="w-44"
+                      options={churches.map((c: any) => ({ value: String(c.id), label: c.name }))}
+                    />
+                    <SelectFilter
+                      param="scc_id"
+                      placeholder="All SCCs"
+                      className="w-44"
+                      options={sccs.map((s: any) => ({ value: String(s.id), label: s.name }))}
+                    />
+                  </>
+                ) : null}
               </div>
             }
           />
@@ -349,7 +369,7 @@ export default async function ContributionsPage({
       <div className="grid gap-4 lg:grid-cols-2">
         <Card padded={false}>
           <div className="p-4">
-            <CardHeader title="Members with the highest arrears" subtitle="Across every billed month." />
+              <CardHeader title={ownOnly ? 'Your arrears' : 'Members with the highest arrears'} subtitle={ownOnly ? 'Your outstanding amounts across every billed month.' : 'Across every billed month.'} />
           </div>
           {arrears.length === 0 ? (
             <div className="p-4 pt-0"><EmptyState title="No arrears" description="Every billed member is up to date." /></div>
@@ -389,7 +409,7 @@ export default async function ContributionsPage({
         <div className="space-y-4">
           <Card padded={false}>
             <div className="p-4">
-              <CardHeader title="Members exempted from monthly contributions" subtitle="Exemptions are permanent until removed by an authorised officer." />
+              <CardHeader title={ownOnly ? 'Your monthly contribution exemption' : 'Members exempted from monthly contributions'} subtitle={ownOnly ? 'An exemption remains in place until an authorised officer changes it.' : 'Exemptions are permanent until removed by an authorised officer.'} />
             </div>
             {exemptedMembers.length === 0 ? (
               <div className="p-4 pt-0"><EmptyState icon={<ShieldCheck className="h-6 w-6" />} title="No exemptions" description="Every active member is billed monthly." /></div>

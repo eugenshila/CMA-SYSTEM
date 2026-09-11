@@ -8,6 +8,7 @@ import {
   OrganisationSettingsForm,
   SecuritySettingsForm,
   NotificationSettingsForm,
+  MinutesOcrSettingsForm,
   GuarantorSettingsForm,
   SettingsGroupForm,
   type GroupField,
@@ -46,13 +47,14 @@ export default async function SettingsPage() {
   if (!user) redirect('/login');
   if (!can(user, 'settings.view')) redirect('/dashboard');
 
-  const [org, contributions, loans, guarantors, security, notifications, sacco, shares] = await Promise.all([
+  const [org, contributions, loans, guarantors, security, notifications, minutesOcr, sacco, shares] = await Promise.all([
     getSetting<any>('organisation'),
     getSetting<any>('contributions'),
     getSetting<any>('loans'),
     getSetting<any>('guarantors'),
     getSetting<any>('security'),
     getSetting<any>('notifications'),
+    getSetting<any>('minutes_ocr'),
     getSaccoSettings(),
     getShareSettings(),
   ]);
@@ -66,6 +68,7 @@ export default async function SettingsPage() {
     { id: 'shares', label: 'Shares', node: <ShareSettingsForm settings={shares} /> },
     { id: 'security', label: 'Security & DPA', node: <SecuritySettingsForm settings={security} /> },
     { id: 'notifications', label: 'Notifications', node: <NotificationSettingsForm settings={notifications} /> },
+    { id: 'minutes-ocr', label: 'Minutes OCR', node: <MinutesOcrSettingsForm settings={minutesOcr} /> },
   ];
 
   return (

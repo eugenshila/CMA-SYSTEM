@@ -7,6 +7,7 @@ import {
   saveOrgSettingsAction,
   saveSecuritySettingsAction,
   saveNotificationSettingsAction,
+  saveMinutesOcrSettingsAction,
   saveGuarantorSettingsAction,
   saveSettingGroupAction,
 } from '@/server/actions/admin';
@@ -123,9 +124,11 @@ export function NotificationSettingsForm({ settings }: { settings: any }) {
               { value: 'generic', label: 'Generic HTTP' },
             ]} />
           </Field>
-          <Field label="Sender ID"><TextInput name="sms_sender_id" defaultValue={s.sms_sender_id || 'CMA'} /></Field>
-          <Field label="API key" hint="Leave blank to keep the current secret"><TextInput name="sms_api_key" placeholder="••••••••" /></Field>
-          <Field label="API secret" hint="Leave blank to keep the current secret"><TextInput name="sms_api_secret" type="password" placeholder="••••••••" /></Field>
+          <Field label="Sender ID / From"><TextInput name="sms_sender_id" defaultValue={s.sms_sender_id || 'CMA'} /></Field>
+          <Field label="Account / username" hint="Africa’s Talking username or Twilio Account SID"><TextInput name="sms_username" defaultValue={s.sms_username || ''} /></Field>
+          <Field label="API key" hint="Africa’s Talking API key, Twilio Account SID or generic bearer key"><TextInput name="sms_api_key" type="password" placeholder="••••••••" /></Field>
+          <Field label="API secret" hint="Twilio auth token; leave blank to keep the current secret"><TextInput name="sms_api_secret" type="password" placeholder="••••••••" /></Field>
+          <Field label="Generic endpoint URL" hint="Required only for Generic HTTP"><TextInput name="sms_api_url" defaultValue={s.sms_api_url || ''} placeholder="https://sms.example.org/send" /></Field>
         </FormGrid>
       </div>
       <div className="rounded-xl border border-slate-200 p-3">
@@ -141,12 +144,51 @@ export function NotificationSettingsForm({ settings }: { settings: any }) {
       <div className="rounded-xl border border-slate-200 p-3">
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-navy-800">WhatsApp Cloud API</p>
         <FormGrid cols={2}>
+          <Field label="Provider"><Select name="whatsapp_provider" defaultValue={s.whatsapp_provider || 'meta'} options={[{ value: 'meta', label: 'Meta WhatsApp Cloud API' }, { value: 'none', label: 'Disabled' }]} /></Field>
           <Field label="Phone number ID"><TextInput name="whatsapp_phone_id" defaultValue={s.whatsapp_phone_id} /></Field>
           <Field label="Access token" hint="Leave blank to keep the current secret"><TextInput name="whatsapp_token" type="password" placeholder="••••••••" /></Field>
         </FormGrid>
+        <p className="hint">Meta requires members’ WhatsApp consent and, outside the 24-hour customer-service window, an approved message template. Delivery results are recorded in the communication log.</p>
       </div>
       <button type="submit" className="btn btn-primary" disabled={pending}>
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save notification channels
+      </button>
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Handwritten meeting-minutes OCR
+ * ------------------------------------------------------------------ */
+export function MinutesOcrSettingsForm({ settings }: { settings: any }) {
+  const [state, action, pending] = useActionState(saveMinutesOcrSettingsAction as any, undefined as ActionResult | undefined);
+  const s = settings || {};
+  return (
+    <form action={action} className="space-y-4">
+      <ResultAlert result={state} />
+      <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 text-sm text-slate-600">
+        Secretaries can upload a handwritten scan from a meeting page. OCR creates a draft only — it must be checked and saved before it is published or shared.
+      </div>
+      <FormGrid cols={2}>
+        <Field label="OCR provider">
+          <Select name="provider" defaultValue={s.provider || 'none'} options={[
+            { value: 'none', label: 'Not configured — manual transcription' },
+            { value: 'google_vision', label: 'Google Cloud Vision (images)' },
+            { value: 'generic', label: 'Generic / on-premise OCR endpoint' },
+          ]} />
+        </Field>
+        <Field label="API key" hint="Leave blank to retain the saved secret.">
+          <TextInput name="api_key" type="password" placeholder="••••••••" />
+        </Field>
+      </FormGrid>
+      <Field
+        label="Endpoint URL"
+        hint="Optional for Google Cloud Vision; required for Generic. Generic OCR receives a multipart `file` and must return JSON with `text`."
+      >
+        <TextInput name="api_url" defaultValue={s.api_url || ''} placeholder="https://ocr.example.org/v1/read" />
+      </Field>
+      <button type="submit" className="btn btn-primary" disabled={pending}>
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save OCR settings
       </button>
     </form>
   );

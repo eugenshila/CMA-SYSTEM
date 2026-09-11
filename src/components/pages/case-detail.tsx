@@ -14,7 +14,7 @@ import {
   Td,
   Th,
 } from '../ui/primitives';
-import { can } from '@/lib/rbac';
+import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one } from '@/lib/db';
 import { CASE_TABLES, caseProgress, type CaseType } from '@/lib/contributions';
@@ -28,6 +28,11 @@ const ICONS: Record<CaseType, any> = { welfare: Heart, funeral: Flower, wedding:
 export default async function CaseDetailPage({ type, id, user }: { type: CaseType; id: number; user: SessionUser }) {
   const meta = CASE_META[type];
   if (!can(user, `${meta.permission}.view`)) redirect('/dashboard');
+
+  // Case notices are visible to the CMA community, but a member role must
+  // never receive another member's identity, phone number or payment record.
+  const memberView = isMember(user);
+  if (memberView && !user.member_id) redirect('/dashboard');
 
   const table = CASE_TABLES[type];
   const refCol = type === 'project' ? 'project_no' : 'case_no';
@@ -48,6 +53,11 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
   if (!record) notFound();
 
   const progress = await caseProgress(type, id);
+  const memberInScope = memberView
+    ? [...progress.contributors, ...progress.non_contributors].some((entry: any) => Number(entry.id) === Number(user.member_id))
+    : true;
+  if (!memberInScope) notFound();
+
   const Icon = ICONS[type];
   const collected = num(progress.collected);
   const expected = num(progress.expected);
@@ -61,7 +71,7 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
   const payHref = (memberId: number, amount: number) =>
     `/payments/new?member_id=${memberId}&alloc_type=${type}&alloc_ref=${id}&amount=${amount.toFixed(2)}`;
 
-  const details: [React.ReactNode, React.ReactNode][] = [
+  const staffDetails: [React.ReactNode, React.ReactNode][] = [
     ...(type === 'welfare'
       ? ([
           ['Category', record.category],
@@ -113,54 +123,94 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
     ['Notes', record.notes],
   ];
 
-  const title =
-    type === 'welfare'
+  const title = memberView
+    ? type === 'welfare'
+      ? 'CMA welfare support'
+      : type === 'funeral'
+        ? 'CMA bereavement support'
+        : type === 'wedding'
+          ? 'CMA wedding support'
+          : record.name
+    : type === 'welfare'
       ? `Welfare — ${record.beneficiary_name || record.member_name}`
       : type === 'funeral'
         ? `Funeral — ${record.deceased_name}`
         : type === 'wedding'
           ? `Wedding — ${record.member_name}${record.spouse_name ? ` & ${record.spouse_name}` : ''}`
           : record.name;
+  const details: [React.ReactNode, React.ReactNode][] = memberView
+    ? [
+        ['Case reference', record.ref],
+        ['Status', caseLabel(record.status)],
+        ['Your required contribution', money(perMember)],
+        ['Deadline', record.deadline ? fmtDate(record.deadline) : '—'],
+      ]
+    : staffDetails;
+  const myContribution = memberView
+    ? [...progress.contributors, ...progress.non_contributors].find((entry: any) => Number(entry.id) === Number(user.member_id))
+    : null;
+  const visibleContributors = memberView
+    ? progress.contributors.filter((entry: any) => Number(entry.id) === Number(user.member_id))
+    : progress.contributors;
+  const visibleNonContributors = memberView
+    ? progress.non_contributors.filter((entry: any) => Number(entry.id) === Number(user.member_id))
+    : progress.non_contributors;
 
   return (
     <div className="space-y-5">
       <SectionHeading
         title={title}
-        subtitle={`${meta.plural} · ${record.ref}${record.parish_name ? ` · ${record.parish_name}` : ''}${record.church_name ? ` · ${record.church_name}` : ''}${record.scc_name ? ` · SCC ${record.scc_name}` : ''}`}
+        subtitle={memberView
+          ? `${meta.label} contribution · ${record.ref}`
+          : `${meta.plural} · ${record.ref}${record.parish_name ? ` · ${record.parish_name}` : ''}${record.church_name ? ` · ${record.church_name}` : ''}${record.scc_name ? ` · SCC ${record.scc_name}` : ''}`}
         action={
           <>
             <Link href={meta.route} className="btn btn-outline btn-sm">Back to list</Link>
-            {can(user, 'documents.view') ? (
+            {!memberView && can(user, 'documents.view') ? (
               <Link href={`/api/exports/cases?type=${type}&id=${id}&format=pdf`} className="btn btn-outline btn-sm">Case report (PDF)</Link>
             ) : null}
           </>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Expected from members" value={money(expected)} tone="navy" icon={<Users className="h-4 w-4" />} sub={`${progress.scope_members} members in scope`} />
-        <StatCard label="Collected" value={money(collected)} tone="green" icon={<Wallet className="h-4 w-4" />} sub={`${progress.contributors.length} contributed`} />
-        <StatCard label="Outstanding" value={money(outstanding)} tone="red" icon={<Inbox className="h-4 w-4" />} sub={`${progress.non_contributors.length} yet to pay`} />
-        <StatCard label="Disbursed" value={money(disbursed)} tone="slate" icon={<ArrowUpRight className="h-4 w-4" />} />
-        <StatCard label="Available balance" value={money(available)} tone="gold" icon={<Banknote className="h-4 w-4" />} />
+      <div className={`grid gap-4 sm:grid-cols-2 ${memberView ? 'xl:grid-cols-3' : 'xl:grid-cols-5'}`}>
+        {memberView ? (
+          <>
+            <StatCard label="Your required contribution" value={money(perMember)} tone="navy" icon={<Users className="h-4 w-4" />} />
+            <StatCard label="Your amount paid" value={money(num(myContribution?.paid))} tone="green" icon={<Wallet className="h-4 w-4" />} />
+            <StatCard label="Your balance" value={money(Math.max(0, perMember - num(myContribution?.paid)))} tone={num(myContribution?.paid) >= perMember ? 'slate' : 'gold'} icon={<Inbox className="h-4 w-4" />} />
+          </>
+        ) : (
+          <>
+            <StatCard label="Expected from members" value={money(expected)} tone="navy" icon={<Users className="h-4 w-4" />} sub={`${progress.scope_members} members in scope`} />
+            <StatCard label="Collected" value={money(collected)} tone="green" icon={<Wallet className="h-4 w-4" />} sub={`${progress.contributors.length} contributed`} />
+            <StatCard label="Outstanding" value={money(outstanding)} tone="red" icon={<Inbox className="h-4 w-4" />} sub={`${progress.non_contributors.length} yet to pay`} />
+            <StatCard label="Disbursed" value={money(disbursed)} tone="slate" icon={<ArrowUpRight className="h-4 w-4" />} />
+            <StatCard label="Available balance" value={money(available)} tone="gold" icon={<Banknote className="h-4 w-4" />} />
+          </>
+        )}
       </div>
 
       <Card>
-        <CardHeader title="Collection progress" action={<Badge tone={caseStatusTone(record.status)}>{caseLabel(record.status)}</Badge>} />
-        <ProgressBar value={collected} total={expected || collected || 1} label={`${money(collected)} of ${money(expected)}`} />
+        <CardHeader title={memberView ? 'Your contribution progress' : 'Collection progress'} action={<Badge tone={caseStatusTone(record.status)}>{caseLabel(record.status)}</Badge>} />
+        <ProgressBar
+          value={memberView ? num(myContribution?.paid) : collected}
+          total={memberView ? perMember || 1 : expected || collected || 1}
+          label={memberView ? `${money(num(myContribution?.paid))} of ${money(perMember)}` : `${money(collected)} of ${money(expected)}`}
+        />
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
-          <span className="inline-flex items-center gap-1.5"><Icon className="h-4 w-4 text-gold-600" /> {money(perMember)} per member</span>
-          <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4 text-navy-700" /> {progress.scope_members} in scope</span>
+          <span className="inline-flex items-center gap-1.5"><Icon className="h-4 w-4 text-gold-600" /> {money(perMember)} {memberView ? 'requested from you' : 'per member'}</span>
+          {!memberView ? <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4 text-navy-700" /> {progress.scope_members} in scope</span> : null}
           {record.deadline ? (
             <span className={`inline-flex items-center gap-1.5 ${isPast(record.deadline) && record.status === 'open' ? 'font-semibold text-red-600' : ''}`}>
               <CalendarDays className="h-4 w-4" /> Deadline {fmtDate(record.deadline)}
             </span>
           ) : null}
-          {record.parish_name ? (
+          {!memberView && record.parish_name ? (
             <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {record.parish_name}</span>
           ) : null}
         </div>
-        {canApprove || canPay ? (
+        {!memberView && (canApprove || canPay) ? (
           <div className="mt-4 border-t border-slate-200 pt-4">
             <CaseActions
               type={type}
@@ -181,7 +231,7 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
         <Card className="lg:col-span-1">
           <CardHeader title="Details" />
           <KeyValue items={details} columns={1} />
-          {type !== 'project' && record.member_id ? (
+          {!memberView && type !== 'project' && record.member_id ? (
             <div className="mt-5 border-t border-slate-200 pt-4">
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Member concerned</p>
               <Link href={`/members/${record.member_id}`} className="mt-1 block font-semibold text-navy-900 hover:text-gold-700">{record.member_name}</Link>
@@ -189,7 +239,7 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
               <Link href={`/members/${record.member_id}`} className="btn btn-outline btn-sm mt-3">Open member profile</Link>
             </div>
           ) : null}
-          {type === 'welfare' && record.hospital ? (
+          {!memberView && type === 'welfare' && record.hospital ? (
             <p className="mt-4 flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
               <Stethoscope className="h-4 w-4 shrink-0" /> {record.hospital}{record.ward ? ` — ${record.ward}` : ''}
             </p>
@@ -200,13 +250,13 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
           <Card padded={false}>
             <div className="p-4">
               <CardHeader
-                title={`Members who contributed (${progress.contributors.length})`}
-                subtitle={`Each member was asked for ${money(perMember)}.`}
+                title={memberView ? 'Your payment' : `Members who contributed (${visibleContributors.length})`}
+                subtitle={memberView ? `Your required contribution is ${money(perMember)}.` : `Each member was asked for ${money(perMember)}.`}
               />
             </div>
-            {progress.contributors.length === 0 ? (
+            {visibleContributors.length === 0 ? (
               <div className="p-4 pt-0">
-                <EmptyState icon={<Wallet className="h-6 w-6" />} title="No contributions yet" description="Record the first contribution for this case." />
+                <EmptyState icon={<Wallet className="h-6 w-6" />} title={memberView ? 'No payment recorded yet' : 'No contributions yet'} description={memberView ? 'Use Pay now from your dashboard to settle this contribution.' : 'Record the first contribution for this case.'} />
               </div>
             ) : (
               <Table>
@@ -219,7 +269,7 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
                   </tr>
                 </thead>
                 <tbody>
-                  {progress.contributors.map((c: any) => {
+                  {visibleContributors.map((c: any) => {
                     const owed = Math.max(0, perMember - num(c.paid));
                     return (
                       <tr key={c.id} className="hover:bg-slate-50/70">
@@ -246,13 +296,13 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
             )}
           </Card>
 
-          {progress.non_contributors.length > 0 ? (
+          {visibleNonContributors.length > 0 ? (
             <Card padded={false}>
               <div className="p-4">
                 <CardHeader
-                  title={`Yet to contribute (${progress.non_contributors.length})`}
-                  subtitle="Send reminders from the actions above, or record a payment on their behalf."
-                  action={canPay ? <Link href={`/payments/new?alloc_type=${type}&alloc_ref=${id}`} className="btn btn-outline btn-sm"><Banknote className="h-4 w-4" /> Record payment</Link> : undefined}
+                  title={memberView ? 'Your outstanding contribution' : `Yet to contribute (${visibleNonContributors.length})`}
+                  subtitle={memberView ? 'Use Pay now from your dashboard to settle your contribution.' : 'Send reminders from the actions above, or record a payment on their behalf.'}
+                  action={!memberView && canPay ? <Link href={`/payments/new?alloc_type=${type}&alloc_ref=${id}`} className="btn btn-outline btn-sm"><Banknote className="h-4 w-4" /> Record payment</Link> : undefined}
                 />
               </div>
               <Table>
@@ -267,7 +317,7 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
                   </tr>
                 </thead>
                 <tbody>
-                  {progress.non_contributors.slice(0, 50).map((c: any) => (
+                  {visibleNonContributors.slice(0, 50).map((c: any) => (
                     <tr key={c.id} className="hover:bg-slate-50/70">
                       <Td>
                         <Link className="font-medium text-navy-800 hover:text-gold-700" href={`/members/${c.id}`}>{c.full_name}</Link>
@@ -286,9 +336,9 @@ export default async function CaseDetailPage({ type, id, user }: { type: CaseTyp
                   ))}
                 </tbody>
               </Table>
-              {progress.non_contributors.length > 50 ? (
+              {!memberView && visibleNonContributors.length > 50 ? (
                 <p className="border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
-                  Showing the first 50 of {progress.non_contributors.length} members. Use the export button for the full list.
+                  Showing the first 50 of {visibleNonContributors.length} members. Use the export button for the full list.
                 </p>
               ) : null}
             </Card>

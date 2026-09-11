@@ -6,7 +6,7 @@ import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { fmtDate, fmtTime, fmtDateTime } from '@/lib/dates';
-import { AttendanceSheet, SelfCheckInButton, EditMeetingButton, MeetingStatusSelect, type AttendanceRow } from '../forms/meeting-forms';
+import { AttendanceSheet, SelfCheckInButton, EditMeetingButton, MeetingStatusSelect, MeetingMinutesPanel, MeetingReminderButton, type AttendanceRow } from '../forms/meeting-forms';
 
 const STATUS_TONES: Record<string, string> = {
   scheduled: 'badge badge-blue',
@@ -72,6 +72,7 @@ export default async function MeetingDetailPage({ id, user }: { id: number; user
         action={
           <>
             <Link href="/meetings" className="btn btn-outline btn-sm"><ArrowLeft className="h-4 w-4" /> All meetings</Link>
+            {canEdit || can(user, 'notifications.create') ? <MeetingReminderButton meetingId={Number(meeting.id)} /> : null}
             {canEdit ? <EditMeetingButton meeting={meeting} parishes={parishes.map((p: any) => ({ value: Number(p.id), label: p.name }))} churches={churches.map((c: any) => ({ value: Number(c.id), label: c.name }))} /> : null}
           </>
         }
@@ -107,12 +108,6 @@ export default async function MeetingDetailPage({ id, user }: { id: number; user
             <div className="mt-3">
               <p className="label">Agenda</p>
               <p className="whitespace-pre-line text-sm text-slate-600">{meeting.agenda}</p>
-            </div>
-          ) : null}
-          {meeting.minutes ? (
-            <div className="mt-3">
-              <p className="label">Minutes</p>
-              <p className="whitespace-pre-line text-sm text-slate-600">{meeting.minutes}</p>
             </div>
           ) : null}
           {canEdit ? (
@@ -172,6 +167,10 @@ export default async function MeetingDetailPage({ id, user }: { id: number; user
           </div>
         </Card>
       </div>
+
+      <Card>
+        <MeetingMinutesPanel meeting={meeting} canEdit={canEdit} />
+      </Card>
     </div>
   );
 }
