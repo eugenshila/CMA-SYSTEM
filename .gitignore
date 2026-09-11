@@ -27,6 +27,7 @@ coverage/
 
 # local database (PGlite dev server) & uploads
 .pgdata/
+.pgdata-test/
 storage/
 uploads/
 public/uploads/

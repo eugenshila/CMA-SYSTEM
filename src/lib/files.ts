@@ -4,7 +4,19 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { env } from './env';
 
-export const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'storage/uploads');
+/**
+ * Where locally stored documents live (relative to the process working
+ * directory, unless UPLOAD_DIR is absolute).
+ *
+ * NOTE: `process.cwd()` must NOT be spelled out here. Next's file tracer
+ * (@vercel/nft) sees `path.resolve(process.cwd(), …)` as an unresolvable
+ * dynamic path and responds by tracing *the entire working directory* into
+ * `.next/standalone` — which dragged the whole repository (`.git`, the local
+ * `.pgdata-test` database, `src`, `scripts`, …) into the packaged desktop app.
+ * `path.resolve()` already prefixes `process.cwd()` at runtime, so omitting it
+ * is behaviour-identical while keeping the trace empty.
+ */
+export const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_DIR || 'storage/uploads');
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',

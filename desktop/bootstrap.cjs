@@ -142,6 +142,30 @@ function waitForHttp(url, timeoutMs = 60_000) {
 }
 
 /**
+ * Shorten the web server's stderr for the failure dialog / desktop.log summary.
+ *
+ * Node prints the actual error first (`Error: Cannot find module 'next'`) and a
+ * long require stack after it, so keeping only the tail — as this used to —
+ * showed the user a stack with no cause. Keep both ends instead; the complete
+ * output is always in `desktop.log`.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function summarizeStderr(text, { maxLines = 40, headLines = 12, tailLines = 15 } = {}) {
+  const lines = text.split('\n');
+  if (lines.length <= maxLines) return text.trim();
+  const omitted = lines.length - headLines - tailLines;
+  return [
+    ...lines.slice(0, headLines),
+    `… ${omitted} more lines (full output in desktop.log) …`,
+    ...lines.slice(-tailLines),
+  ]
+    .join('\n')
+    .trim();
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.dataDir            where PGlite data + config + credentials live
  * @param {string} [opts.standaloneDir]    override for the Next.js standalone build
@@ -222,15 +246,24 @@ async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  // Keep the tail of the child's stderr so an early crash can be reported
-  // with its actual cause (e.g. MODULE_NOT_FOUND) instead of a bare exit code.
+  // Keep both ends of the child's stderr so an early crash can be reported
+  // with its actual cause. Node prints the error itself first
+  // ("Error: Cannot find module 'next'") and a long require stack after it, so
+  // a tail-only excerpt — what the failure dialog shows — used to hide the
+  // very line the user needs.
+  const stderrHead = [];
   const stderrTail = [];
+  let stderrDroppedChunks = 0;
   web.stdout.on('data', (c) => logger.log('[web] ' + String(c).trimEnd()));
   web.stderr.on('data', (c) => {
     const s = String(c);
     logger.error('[web] ' + s.trimEnd());
+    if (stderrHead.length < 5) stderrHead.push(s);
     stderrTail.push(s);
-    if (stderrTail.length > 30) stderrTail.shift();
+    if (stderrTail.length > 30) {
+      stderrTail.shift();
+      stderrDroppedChunks++;
+    }
   });
   web.on('exit', (code, signal) => {
     logger.log(`[desktop] web server exited (code=${code}, signal=${signal})`);
@@ -239,24 +272,39 @@ async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus
 
   const url = `http://127.0.0.1:${webPort}`;
   // Fail fast when the spawned server dies during startup (with its output),
-  // instead of waiting out the full HTTP timeout.
+  // instead of waiting out the full HTTP timeout. When that happens the caller
+  // never receives a handle, so nothing else can tear the embedded database
+  // down — close it here, or PGlite and its wire server keep the process alive
+  // (the desktop app idles with a stray database, the smoke test hangs instead
+  // of reporting the failure).
   const earlyExit = new Promise((_, reject) => {
     web.once('exit', (code, signal) => {
       // Give buffered stdout/stderr a moment to land in stderrTail.
       setTimeout(() => {
-        const details = stderrTail.join('').trim();
+        // Head + tail: the cause is the first line the child printed, the
+        // require stack is the last thing it printed.
+        const raw =
+          stderrDroppedChunks > 0
+            ? stderrHead.join('') +
+              `\n… ${stderrDroppedChunks} more output chunks (full output in desktop.log) …\n` +
+              stderrTail.join('')
+            : stderrTail.join('');
+        const details = summarizeStderr(raw);
         reject(
           new Error(
             `The web server exited before it became ready (code=${code}, signal=${signal}).` +
-              (details
-                ? '\n--- web server output ---\n' + details.split('\n').slice(-15).join('\n')
-                : ''),
+              (details ? '\n--- web server output ---\n' + details : ''),
           ),
         );
       }, 150);
     });
   });
-  await Promise.race([waitForHttp(url, 60_000), earlyExit]);
+  try {
+    await Promise.race([waitForHttp(url, 60_000), earlyExit]);
+  } catch (err) {
+    await stopDesktop({ web, socketServer, db });
+    throw err;
+  }
   log('[desktop] web server ready at ' + url);
 
   return {
@@ -292,4 +340,10 @@ async function stopDesktop(handle) {
   }
 }
 
-module.exports = { startDesktop, stopDesktop, asarUnpackedPath, resolveServerEntry };
+module.exports = {
+  startDesktop,
+  stopDesktop,
+  asarUnpackedPath,
+  resolveServerEntry,
+  summarizeStderr,
+};
