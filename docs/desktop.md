@@ -135,14 +135,35 @@ just opens the URL, so hot reload works as usual.
 ## First launch
 
 1. The main process boots PGlite and applies `db/migrations/*.sql`.
-2. If the database has no users, a `super_admin` account (`ADMIN` /
-   `admin@cma.local`) is created with a generated password and
-   `must_change_password = TRUE`.
-3. The credentials are written to `first-run-credentials.txt` in the data
-   directory and the Next server is started; the splash window shows progress.
+2. **Demo mode (default):** if the database still has no members or users, the
+   demonstration dataset (`desktop/demo-seed.cjs`) is seeded — St. Joseph
+   Mukasa Parish, Kahawa West with the St. Peter and Paul (Marengeta) and
+   St. Francis of Assisi (Soweto) sub-parishes, 64 members, contributions,
+   SDP/sacco savings and shares, loans, meetings, and the Last Respect
+   Insurance scheme (no hospital data). Demo logins:
 
-Sign in with the generated credentials, then choose a new password. Delete the
-credentials file once signed in.
+   | Role            | Login ID   | Password        |
+   | --------------- | ---------- | --------------- |
+   | Super admin     | `SUPER001` | `Cma@Super2026` |
+   | Administrator   | `ADMIN001` | `Cma@Admin2026` |
+   | Chairman        | `CHAIR001` | `Cma@Chair2026` |
+   | Treasurer       | `TRES001`  | `Cma@Treas2026` |
+   | Secretary       | `SEC001`   | `Cma@Sec2026`   |
+   | SDP/Sacco       | `SDP001`   | `Cma@Sacco2026` |
+   | Loan committee  | `LOAN001`  | `Cma@Loan2026`  |
+   | Member portal   | `CMA/SJM/0006` | `Member@2026` |
+
+   (The same dataset backs `npm run db:seed` for development databases.)
+3. **Demo off:** set `CMA_DEMO_SEED=0` (or pass `seed: false` to
+   `startDesktop`) before first launch and the random-password first-run flow
+   takes over instead: a `super_admin` account (`ADMIN` / `admin@cma.local`)
+   is created with a generated password and `must_change_password = TRUE`, and
+   the credentials are written to `first-run-credentials.txt`.
+4. The Next server is started; the splash window shows progress.
+
+To start over — e.g. an install from a version before demo data existed —
+close the app, delete the data directory (see below), and relaunch so the
+first-launch flow runs again.
 
 ## Where data lives
 
@@ -156,7 +177,9 @@ Inside it:
 
 - `pglite/` — the PostgreSQL data directory (back this up)
 - `config.json` — per-installation `AUTH_SECRET` and `ENCRYPTION_KEY`
-- `first-run-credentials.txt` — created on first launch only
+- `uploads/` — member document uploads (`UPLOAD_DIR` for the web server)
+- `first-run-credentials.txt` — created on first launch only when demo
+  seeding is disabled
 - `desktop.log` — startup log of the most recent sessions (rotated to
   `desktop.log.old` past 2 MB); the failure dialog points here
 

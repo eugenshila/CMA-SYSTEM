@@ -60,7 +60,7 @@ export default async function MemberSearchPage({
 
       <Card>
         <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder="e.g. John Kamau, CMA/STM/0012, 0712…, 12345678" className="min-w-[240px] flex-1" autoFocus />
+          <SearchInput placeholder="e.g. John Smith, CMA/SJM/0012, 0712…, 12345678" className="min-w-[240px] flex-1" autoFocus />
           <SelectFilter param="parish" placeholder="All parishes" options={parishes.map((p) => ({ value: String(p.id), label: p.name }))} />
           <SelectFilter
             param="status"

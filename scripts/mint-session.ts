@@ -2,7 +2,7 @@
  * Development helper: prints a valid `cma_session` cookie for a seeded user so
  * pages can be smoke-tested with curl (no browser needed).
  *
- *   npx tsx scripts/mint-session.ts treasurer@stmonica.or.ke
+ *   npx tsx scripts/mint-session.ts treasurer@stjosephmukasa.or.ke
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,7 +25,7 @@ const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret';
 const secretKey = () => new TextEncoder().encode(AUTH_SECRET);
 
 async function main() {
-  const identifier = process.argv[2] || 'admin@stmonica.or.ke';
+  const identifier = process.argv[2] || 'admin@stjosephmukasa.or.ke';
   const client = new pg.Client({ connectionString: DATABASE_URL });
   await client.connect();
 

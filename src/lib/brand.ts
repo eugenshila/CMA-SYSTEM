@@ -20,7 +20,7 @@ export const BRAND = {
 /**
  * Monogram initials for the graceful logo fallback badge.
  * Short codes ("CMA") are used verbatim; longer names collapse to up to
- * three leading capitals ("St. Monica Chapter" → "SMC").
+ * three leading capitals ("St. Joseph Mukasa Chapter" → "SJMC").
  */
 export function brandInitials(shortName?: string | null, name?: string | null): string {
   const raw = (shortName || '').trim() || (name || '').trim() || BRAND.shortName;

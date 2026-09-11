@@ -11,7 +11,8 @@
  *           the standalone tree carries no stray repository files,
  *           asar→unpacked path translation correct, desktop.log logger writes
  *           what the failure dialog points at.
- *   Part 1  full stack boot from the source tree (plain `node` child).
+ *   Part 1  full stack boot from a fresh data directory (plain `node` child):
+ *           the demo dataset is seeded and the login screen renders.
  *   Part 2  full stack boot from a SIMULATED INSTALLED APP: app.asar archive
  *           on disk + real files only under app.asar.unpacked — reproducing
  *           the packaged layout that broke the v1.0.1 installers. The
@@ -19,6 +20,8 @@
  *           has NO nested node_modules (electron-builder does not ship them),
  *           so `next` can only resolve from the unpacked top-level
  *           node_modules — exactly as in the real installer.
+ *   Part 3  demo seed disabled: the first-run ADMIN fallback still provisions
+ *           an empty installation and writes first-run-credentials.txt.
  *
  * Usage:
  *
@@ -75,7 +78,7 @@ function get(url, { maxRedirects = 3 } = {}) {
 }
 
 /** Boot the full desktop stack against `dataDir` and verify the login screen. */
-async function bootAndVerify({ dataDir, standaloneDir }) {
+async function bootAndVerify({ dataDir, standaloneDir, seed }) {
   const lines = [];
   const logger = {
     log: (m) => {
@@ -88,7 +91,7 @@ async function bootAndVerify({ dataDir, standaloneDir }) {
     },
   };
 
-  const handle = await startDesktop({ dataDir, standaloneDir, logger });
+  const handle = await startDesktop({ dataDir, standaloneDir, seed, logger });
   try {
     const rootRes = await get(handle.url).catch((e) => {
       throw new Error(`GET / failed: ${e.message}`);
@@ -108,19 +111,36 @@ async function bootAndVerify({ dataDir, standaloneDir }) {
     }
 
     const credPath = path.join(dataDir, 'first-run-credentials.txt');
-    if (!fs.existsSync(credPath)) {
-      throw new Error(`first-run admin credentials missing: ${credPath}`);
-    }
-
     const pg = require('pg');
     const client = new pg.Client({ connectionString: handle.databaseUrl });
     await client.connect();
     const { rows } = await client.query(
-      'SELECT (SELECT count(*) FROM users)::int AS users, (SELECT count(*) FROM schema_migrations)::int AS migrations',
+      `SELECT (SELECT count(*) FROM users)::int AS users,
+              (SELECT count(*) FROM members)::int AS members,
+              (SELECT count(*) FROM schema_migrations)::int AS migrations,
+              (SELECT count(*) FROM users WHERE login_id = 'ADMIN001')::int AS demo_admins,
+              (SELECT count(*) FROM users WHERE login_id = 'ADMIN')::int AS first_run_admins`,
     );
     await client.end();
-    if (rows[0].users < 1 || rows[0].migrations < 1) {
-      throw new Error(`database unexpectedly empty: ${JSON.stringify(rows[0])}`);
+
+    if (seed === false) {
+      // First-run fallback: a random-password ADMIN is provisioned and the
+      // credentials file is written; no demo data exists.
+      if (!fs.existsSync(credPath)) {
+        throw new Error(`first-run admin credentials missing: ${credPath}`);
+      }
+      if (rows[0].first_run_admins !== 1 || rows[0].members !== 0) {
+        throw new Error(`first-run provisioning wrong: ${JSON.stringify(rows[0])}`);
+      }
+    } else {
+      // Demo mode: the dataset is seeded, the demo admin exists and the
+      // random-password first-run flow stays out of the way.
+      if (fs.existsSync(credPath)) {
+        throw new Error(`demo seeding ran, yet a first-run credentials file exists: ${credPath}`);
+      }
+      if (rows[0].demo_admins !== 1 || rows[0].members < 60 || rows[0].migrations < 1) {
+        throw new Error(`demo dataset incomplete: ${JSON.stringify(rows[0])}`);
+      }
     }
     return { handle, lines };
   } finally {
@@ -205,6 +225,17 @@ async function part0StaticGuards() {
     'production build present (.next/standalone/server.js)',
     fs.existsSync(path.join(standaloneDir, 'server.js')),
     'run `npm run build` first',
+  );
+
+  check(
+    'demo seeder shipped with the desktop bundle (desktop/demo-seed.cjs)',
+    fs.existsSync(path.join(root, 'desktop', 'demo-seed.cjs')),
+    'electron-builder files already include desktop/** — keep the seeder there',
+  );
+  check(
+    'bootstrap wires the demo seed into startup',
+    fs.readFileSync(path.join(root, 'desktop', 'bootstrap.cjs'), 'utf8').includes('seedDemoData'),
+    'startDesktop must call seedDemoData on first launch',
   );
 
   // The packaging contract: everything the spawned Node child reads must be
@@ -292,12 +323,22 @@ async function part0StaticGuards() {
 }
 
 async function part1BootFromSource() {
-  console.log('[smoke] part 1: boot the desktop stack from the source tree');
+  console.log('[smoke] part 1: boot the desktop stack from the source tree (demo seed enabled)');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cma-smoke-src-'));
   console.log(`[smoke] data dir: ${dataDir}`);
   const { handle } = await bootAndVerify({ dataDir });
   console.log(
-    `[smoke] login screen renders, admin provisioned, database ready (users=1, url=${handle.url})`,
+    `[smoke] login screen renders, demo dataset seeded, database ready (url=${handle.url})`,
+  );
+}
+
+async function part3FirstRunFallback() {
+  console.log('[smoke] part 3: demo seed disabled — first-run ADMIN fallback');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cma-smoke-firstrun-'));
+  console.log(`[smoke] data dir: ${dataDir}`);
+  const { handle } = await bootAndVerify({ dataDir, seed: false });
+  console.log(
+    `[smoke] login screen renders, first-run administrator provisioned (url=${handle.url})`,
   );
 }
 
@@ -371,6 +412,7 @@ async function main() {
     await part0StaticGuards();
     await part1BootFromSource();
     await part2BootFromSimulatedPackage();
+    await part3FirstRunFallback();
   } catch (err) {
     console.error(`✗ ${err && err.stack ? err.stack : err}`);
     process.exit(1);

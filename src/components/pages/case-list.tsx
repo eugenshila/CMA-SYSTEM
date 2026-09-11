@@ -18,6 +18,7 @@ import { SearchInput, SelectFilter } from '../ui/client';
 import { can } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
+import { getSetting } from '@/lib/settings';
 import { CASE_TABLES, type CaseType } from '@/lib/contributions';
 import { CASE_META, CASE_STATUSES, caseLabel, caseStatusTone, caseTitle } from '@/lib/cases';
 import { money, num } from '@/lib/money';
@@ -105,6 +106,10 @@ export default async function CaseListPage({
   const disbursed = num(totals?.disbursed);
   const balance = collected - disbursed;
 
+  // The Last Respect Insurance scheme description is shown above the funeral
+  // records (configured in Settings → system setting `last_respect_insurance`).
+  const insurance = type === 'funeral' ? await getSetting<any>('last_respect_insurance') : null;
+
   return (
     <div className="space-y-5">
       <SectionHeading
@@ -136,6 +141,47 @@ export default async function CaseListPage({
           sub={`${money(disbursed)} already disbursed`}
         />
       </div>
+
+      {type === 'funeral' && insurance?.title ? (
+        <Card>
+          <CardHeader title={insurance.title} subtitle={insurance.tagline} />
+          {insurance.overview ? <p className="text-sm text-slate-700">{insurance.overview}</p> : null}
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <h4 className="text-sm font-semibold text-navy-900">Key features</h4>
+              <div className="mt-2 space-y-3">
+                {(insurance.key_features || []).map((f: any) => (
+                  <div key={f.label}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{f.label}</div>
+                    <div className="text-sm text-slate-700">{f.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-navy-900">Benefits</h4>
+              <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-slate-700">
+                {(insurance.benefits || []).map((b: string) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+              {insurance.premium ? (
+                <p className="mt-3 text-sm text-slate-700">
+                  <span className="font-semibold text-navy-900">CMA scheme premium:</span> {insurance.premium}
+                </p>
+              ) : null}
+              {insurance.benefit ? (
+                <p className="mt-1 text-sm text-slate-700">
+                  <span className="font-semibold text-navy-900">Benefit:</span> {insurance.benefit}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {insurance.conclusion ? (
+            <p className="border-t border-slate-100 pt-3 text-xs text-slate-500">{insurance.conclusion}</p>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card padded={false}>
         <div className="p-4">

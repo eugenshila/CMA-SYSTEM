@@ -28,6 +28,7 @@ const http = require('node:http');
 
 const { runMigrations } = require('./migrate.cjs');
 const { ensureFirstAdmin } = require('./first-run.cjs');
+const { seedDemoData } = require('./demo-seed.cjs');
 
 const CONFIG_FILE = 'config.json';
 
@@ -172,12 +173,16 @@ function summarizeStderr(text, { maxLines = 40, headLines = 12, tailLines = 15 }
  *                                         directory (defaults to <app>/.next/standalone);
  *                                         the smoke test uses this to simulate the packaged
  *                                         app.asar / app.asar.unpacked layout
- * @param {boolean} [opts.seed]            currently unused (kept for future demo seed)
+ * @param {boolean} [opts.seed]            seed the demonstration dataset on first
+ *                                         launch (default: true; CMA_DEMO_SEED=0
+ *                                         disables it). The seed is a no-op when the
+ *                                         database already has members or users, so
+ *                                         existing installations are never touched.
  * @param {Console|object} [opts.logger]
  * @param {(msg: string) => void} [opts.onStatus]
  * @param {(code: number|null, signal: string|null) => void} [opts.onWebExit]
  */
-async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus, onWebExit } = {}) {
+async function startDesktop({ dataDir, standaloneDir, seed = true, logger = console, onStatus, onWebExit } = {}) {
   const log = (msg) => {
     logger.log(msg);
     if (onStatus) onStatus(msg);
@@ -189,7 +194,9 @@ async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus
 
   const config = loadOrCreateConfig(dataDir);
   const dbDir = path.join(dataDir, 'pglite');
+  const uploadsDir = path.join(dataDir, 'uploads');
   fs.mkdirSync(dbDir, { recursive: true });
+  fs.mkdirSync(uploadsDir, { recursive: true });
 
   log('[desktop] starting embedded PostgreSQL (PGlite)…');
   const db = new PGlite(dbDir, { relaxedDurability: true });
@@ -210,6 +217,23 @@ async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus
   log('[desktop] applying schema migrations…');
   await runMigrations(databaseUrl, logger);
 
+  // Demonstration dataset on first launch. The seeder skips databases that
+  // already carry members or users (e.g. an upgrade from an earlier install),
+  // and a failure here must never block the app from starting.
+  if (seed !== false && process.env.CMA_DEMO_SEED !== '0') {
+    try {
+      const seeded = await seedDemoData({
+        databaseUrl,
+        encryptionKey: config.encryptionKey,
+        uploadRoot: uploadsDir,
+        logger,
+      });
+      if (seeded) log('[desktop] demonstration dataset seeded (login ADMIN001 / Cma@Admin2026 for the demo administrator)');
+    } catch (err) {
+      logger.error('[desktop] demo seed failed — continuing without demo data: ' + (err && err.stack ? err.stack : err));
+    }
+  }
+
   const admin = await ensureFirstAdmin(databaseUrl, dataDir, logger);
   if (admin) log('[desktop] first-run administrator created — credentials written to ' + admin.credPath);
 
@@ -228,6 +252,10 @@ async function startDesktop({ dataDir, standaloneDir, logger = console, onStatus
     DATABASE_URL: databaseUrl,
     AUTH_SECRET: config.authSecret,
     ENCRYPTION_KEY: config.encryptionKey,
+    // Uploaded member documents live in the writable data directory — the
+    // default (./storage/uploads next to the server) points inside Program
+    // Files on an installed Windows desktop app, which is not writable.
+    UPLOAD_DIR: uploadsDir,
     // The embedded PGlite server is single-threaded WASM — a single pooled
     // connection avoids the ECONNRESET bursts a wider pool would cause.
     PGPOOL_MAX: '1',
