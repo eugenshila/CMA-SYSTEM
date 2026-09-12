@@ -43,6 +43,7 @@ export default async function MemberDashboard({ memberId, canPay }: { memberId: 
                 COALESCE(SUM(amount) FILTER (WHERE transaction_type IN ('deposit','interest','dividend','transfer_in')),0)::float AS deposits
            FROM savings WHERE member_id = $1 AND reversed = FALSE AND transaction_date >= now() - interval '12 months'
           GROUP BY 1 ORDER BY 1`,
+        [memberId],
       ),
       one<any>('SELECT * FROM sacco_accounts WHERE member_id = $1', [memberId]),
       query<any>(
