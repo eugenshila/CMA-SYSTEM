@@ -427,10 +427,10 @@ export async function memberCaseOutstanding(memberId: number) {
   }[] = [];
 
   const welfare = await query<any>(
-    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.status, m.full_name,
+    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.status,
             COALESCE((SELECT SUM(p.amount) FROM welfare_payments p WHERE p.welfare_case_id = c.id AND p.member_id = $1),0) AS paid
-       FROM welfare_cases c JOIN members m ON m.id = c.member_id
-      WHERE c.status = 'open' AND m.id <> $1
+       FROM welfare_cases c
+      WHERE c.status = 'open' AND c.member_id <> $1
         AND (c.parish_id = (SELECT parish_id FROM members WHERE id = $1) OR c.parish_id IS NULL)`,
     [memberId],
   );
@@ -441,7 +441,7 @@ export async function memberCaseOutstanding(memberId: number) {
         type: 'welfare',
         id: c.id,
         reference: c.case_no,
-        title: `Welfare — ${c.full_name}`,
+        title: 'Welfare support contribution',
         expected: num(c.amount_per_member),
         paid: num(c.paid),
         outstanding,
@@ -450,7 +450,7 @@ export async function memberCaseOutstanding(memberId: number) {
   }
 
   const funerals = await query<any>(
-    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.status, c.deceased_name, c.relationship,
+    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.status,
             COALESCE((SELECT SUM(p.amount) FROM funeral_payments p WHERE p.funeral_case_id = c.id AND p.member_id = $1),0) AS paid
        FROM funeral_cases c
       WHERE c.status = 'open' AND c.member_id <> $1
@@ -464,7 +464,7 @@ export async function memberCaseOutstanding(memberId: number) {
         type: 'funeral',
         id: c.id,
         reference: c.case_no,
-        title: `Funeral — ${c.deceased_name} (${c.relationship})`,
+        title: 'Bereavement support contribution',
         expected: num(c.amount_per_member),
         paid: num(c.paid),
         outstanding,
@@ -473,9 +473,9 @@ export async function memberCaseOutstanding(memberId: number) {
   }
 
   const weddings = await query<any>(
-    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.wedding_date, m.full_name,
+    `SELECT c.id, c.case_no, c.amount_per_member, c.deadline, c.wedding_date,
             COALESCE((SELECT SUM(p.amount) FROM wedding_payments p WHERE p.wedding_case_id = c.id AND p.member_id = $1),0) AS paid
-       FROM wedding_cases c JOIN members m ON m.id = c.member_id
+       FROM wedding_cases c
       WHERE c.status = 'open' AND c.member_id <> $1
         AND (c.parish_id = (SELECT parish_id FROM members WHERE id = $1) OR c.parish_id IS NULL)`,
     [memberId],
@@ -487,7 +487,7 @@ export async function memberCaseOutstanding(memberId: number) {
         type: 'wedding',
         id: c.id,
         reference: c.case_no,
-        title: `Wedding — ${c.full_name}`,
+        title: 'Wedding support contribution',
         expected: num(c.amount_per_member),
         paid: num(c.paid),
         outstanding,

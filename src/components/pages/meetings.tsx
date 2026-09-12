@@ -7,7 +7,7 @@ import { can, isMember } from '@/lib/rbac';
 import type { SessionUser } from '@/lib/auth';
 import { one, query } from '@/lib/db';
 import { fmtDate, fmtTime } from '@/lib/dates';
-import { NewMeetingButton } from '../forms/meeting-forms';
+import { NewMeetingButton, BulkMessageButton } from '../forms/meeting-forms';
 import { MEETING_TYPES } from '@/lib/meeting-meta';
 
 const PER_PAGE = 15;
@@ -30,6 +30,7 @@ export default async function MeetingsPage({
 
   const staff = !isMember(user);
   const canCreate = can(user, 'meetings.create');
+  const canMessage = can(user, 'notifications.create');
 
   const search = String(sp.search || sp.q || '').trim();
   const type = String(sp.type || '');
@@ -93,8 +94,15 @@ export default async function MeetingsPage({
     <div className="space-y-5">
       <SectionHeading
         title="Meetings & attendance"
-        subtitle="CMA meetings, General Assemblies and committees — with attendance tracking and member self check-in."
-        action={canCreate ? <NewMeetingButton parishes={parishes.map((p: any) => ({ value: Number(p.id), label: p.name }))} churches={churches.map((c: any) => ({ value: Number(c.id), label: c.name }))} /> : undefined}
+        subtitle="CMA meetings, General Assemblies and committees — attendance, self check-in, reminders and bulk member updates."
+        action={
+          canCreate || canMessage ? (
+            <>
+              {canMessage ? <BulkMessageButton /> : null}
+              {canCreate ? <NewMeetingButton parishes={parishes.map((p: any) => ({ value: Number(p.id), label: p.name }))} churches={churches.map((c: any) => ({ value: Number(c.id), label: c.name }))} /> : null}
+            </>
+          ) : undefined
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

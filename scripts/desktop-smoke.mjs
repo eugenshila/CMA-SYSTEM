@@ -12,7 +12,8 @@
  *           asar→unpacked path translation correct, desktop.log logger writes
  *           what the failure dialog points at.
  *   Part 1  full stack boot from a fresh data directory (plain `node` child):
- *           the demo dataset is seeded and the login screen renders.
+ *           the demo dataset is seeded, the login screen renders, and a signed-in
+ *           ordinary member dashboard renders without a server error.
  *   Part 2  full stack boot from a SIMULATED INSTALLED APP: app.asar archive
  *           on disk + real files only under app.asar.unpacked — reproducing
  *           the packaged layout that broke the v1.0.1 installers. The
@@ -33,7 +34,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
+import { SignJWT } from 'jose';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
@@ -55,16 +58,16 @@ function check(name, condition, detail) {
   }
 }
 
-function get(url, { maxRedirects = 3 } = {}) {
+function get(url, { maxRedirects = 3, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, { headers }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         const location = res.headers.location;
         if (res.statusCode >= 300 && res.statusCode < 400 && location && maxRedirects > 0) {
-          get(new URL(location, url).toString(), { maxRedirects: maxRedirects - 1 })
+          get(new URL(location, url).toString(), { maxRedirects: maxRedirects - 1, headers })
             .then(resolve)
             .catch(reject);
           return;
@@ -75,6 +78,67 @@ function get(url, { maxRedirects = 3 } = {}) {
     req.on('error', reject);
     req.setTimeout(60_000, () => req.destroy(new Error('timeout')));
   });
+}
+
+/**
+ * Create a real signed session for the seeded ordinary-member account. This
+ * avoids coupling the desktop runtime smoke test to Next's private server
+ * action wire format while still exercising the same authenticated dashboard
+ * request that Electron makes after a normal sign-in.
+ */
+async function memberSessionCookie(handle) {
+  const pg = require('pg');
+  const client = new pg.Client({ connectionString: handle.databaseUrl });
+  await client.connect();
+  try {
+    const { rows: users } = await client.query(
+      `SELECT u.id, r.key AS role_key
+         FROM users u JOIN roles r ON r.id = u.role_id
+        WHERE u.login_id = 'CMA/SJM/0006' AND u.member_id IS NOT NULL
+        LIMIT 1`,
+    );
+    const user = users[0];
+    if (!user || user.role_key !== 'member') {
+      throw new Error('demo ordinary-member account CMA/SJM/0006 is missing');
+    }
+
+    const raw = crypto.randomBytes(32).toString('base64url');
+    const { rows: sessions } = await client.query(
+      `INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at)
+       VALUES ($1,$2,'127.0.0.1','desktop-smoke', now() + interval '12 hours')
+       RETURNING id`,
+      [user.id, crypto.createHash('sha256').update(raw).digest('hex')],
+    );
+    const sessionId = Number(sessions[0]?.id);
+    if (!sessionId) throw new Error('could not create ordinary-member smoke-test session');
+
+    const token = await new SignJWT({ rk: user.role_key, sid: sessionId })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(String(user.id))
+      .setIssuedAt()
+      .setIssuer('cma-system')
+      .setExpirationTime('12h')
+      .sign(new TextEncoder().encode(handle.config.authSecret));
+
+    return `cma_session=${token}`;
+  } finally {
+    await client.end();
+  }
+}
+
+/** Verify the production dashboard renders for a signed-in ordinary member. */
+async function verifyMemberDashboard(handle) {
+  const cookie = await memberSessionCookie(handle);
+  const res = await get(`${handle.url}/dashboard`, { headers: { Cookie: cookie } });
+  if (res.status !== 200) {
+    throw new Error(`ordinary-member dashboard returned HTTP ${res.status}`);
+  }
+  if (/id="__next_error__"|server-side exception|application error/i.test(res.body)) {
+    throw new Error('ordinary-member dashboard rendered a Next.js server-error page');
+  }
+  if (!/My monthly contributions|Savings balance|Karibu,/i.test(res.body)) {
+    throw new Error('ordinary-member dashboard rendered but expected member content was not found');
+  }
 }
 
 /** Boot the full desktop stack against `dataDir` and verify the login screen. */
@@ -141,6 +205,7 @@ async function bootAndVerify({ dataDir, standaloneDir, seed }) {
       if (rows[0].demo_admins !== 1 || rows[0].members < 60 || rows[0].migrations < 1) {
         throw new Error(`demo dataset incomplete: ${JSON.stringify(rows[0])}`);
       }
+      await verifyMemberDashboard(handle);
     }
     return { handle, lines };
   } finally {
@@ -328,7 +393,7 @@ async function part1BootFromSource() {
   console.log(`[smoke] data dir: ${dataDir}`);
   const { handle } = await bootAndVerify({ dataDir });
   console.log(
-    `[smoke] login screen renders, demo dataset seeded, database ready (url=${handle.url})`,
+    `[smoke] login screen and authenticated ordinary-member dashboard render, demo dataset seeded, database ready (url=${handle.url})`,
   );
 }
 

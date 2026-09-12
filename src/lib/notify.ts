@@ -140,7 +140,9 @@ async function dispatch(
       ? settings.sms_provider
       : channel === 'email'
         ? settings.email_provider
-        : 'none';
+        : channel === 'whatsapp'
+          ? settings.whatsapp_provider
+          : 'none';
 
   if (!provider || provider === 'none') {
     console.log(
@@ -154,7 +156,51 @@ async function dispatch(
   }
 
   try {
-    if (channel === 'sms' && settings._raw?.sms_api_url) {
+    if (channel === 'sms' && provider === 'africastalking') {
+      const apiKey = String(settings._raw?.sms_api_key || '');
+      if (!apiKey) return { provider, status: 'skipped', message: 'Africa’s Talking API key is not configured' };
+      const body = new URLSearchParams({
+        username: String(settings._raw?.sms_username || 'sandbox'),
+        to: `+${destination}`,
+        message: `${input.title}: ${input.body}`.slice(0, 1600),
+      });
+      if (settings.sms_sender_id) body.set('from', settings.sms_sender_id);
+      const res = await fetch('https://api.africastalking.com/version1/messaging', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', apiKey },
+        body,
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      return {
+        provider,
+        status: res.ok ? 'sent' : 'failed',
+        message: res.ok ? 'Accepted by Africa’s Talking' : String(data?.errorMessage || `Africa’s Talking responded ${res.status}`).slice(0, 300),
+      };
+    }
+    if (channel === 'sms' && provider === 'twilio') {
+      const accountSid = String(settings._raw?.sms_username || settings._raw?.sms_api_key || '');
+      const authToken = String(settings._raw?.sms_api_secret || '');
+      if (!accountSid || !authToken || !settings.sms_sender_id) {
+        return { provider, status: 'skipped', message: 'Twilio Account SID, auth token or From number is not configured' };
+      }
+      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ To: `+${destination}`, From: settings.sms_sender_id, Body: `${input.title}: ${input.body}`.slice(0, 1600) }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      return {
+        provider,
+        status: res.ok ? 'sent' : 'failed',
+        message: res.ok ? 'Accepted by Twilio' : String(data?.message || `Twilio responded ${res.status}`).slice(0, 300),
+      };
+    }
+    if (channel === 'sms' && provider === 'generic' && settings._raw?.sms_api_url) {
       const res = await fetch(String(settings._raw.sms_api_url), {
         method: 'POST',
         headers: {
@@ -166,11 +212,35 @@ async function dispatch(
           message: `${input.title}: ${input.body}`,
           sender: settings.sms_sender_id,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
       return {
         provider,
         status: res.ok ? 'sent' : 'failed',
         message: res.ok ? 'Accepted by SMS gateway' : `Gateway responded ${res.status}`,
+      };
+    }
+    if (channel === 'whatsapp' && provider === 'meta') {
+      const phoneId = String(settings._raw?.whatsapp_phone_id || '');
+      const token = String(settings._raw?.whatsapp_token || '');
+      if (!phoneId || !token) return { provider, status: 'skipped', message: 'Meta WhatsApp phone number ID or access token is not configured' };
+      const res = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: destination,
+          type: 'text',
+          text: { preview_url: true, body: `${input.title}\n\n${input.body}`.slice(0, 4096) },
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      return {
+        provider,
+        status: res.ok ? 'sent' : 'failed',
+        message: res.ok ? 'Accepted by Meta WhatsApp Cloud API' : String(data?.error?.message || `Meta responded ${res.status}`).slice(0, 300),
       };
     }
     if (channel === 'email' && settings._raw?.email_api_url) {
@@ -246,12 +316,16 @@ export async function notifyMembers(
   memberIds: number[],
   input: Omit<NotifyInput, 'userId' | 'memberId'>,
 ): Promise<number> {
-  let sent = 0;
-  for (const memberId of memberIds) {
-    await notify({ ...input, memberId });
-    sent++;
+  // Send a small number in parallel. A sequential loop made a normal parish
+  // SMS campaign take minutes, while an unbounded Promise.all can trip a
+  // provider's rate limit. Every recipient still gets an individual inbox and
+  // delivery-log record.
+  const recipients = [...new Set(memberIds.filter(Boolean))];
+  const concurrency = 5;
+  for (let start = 0; start < recipients.length; start += concurrency) {
+    await Promise.all(recipients.slice(start, start + concurrency).map((memberId) => notify({ ...input, memberId })));
   }
-  return sent;
+  return recipients.length;
 }
 
 export async function notifyRole(roleKey: string, input: Omit<NotifyInput, 'userId' | 'memberId'>) {

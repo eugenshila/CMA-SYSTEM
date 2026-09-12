@@ -147,9 +147,10 @@ SELECT grant_perms('auditor', ARRAY[
   'attendance.view','meetings.view','MODULE:reports','MODULE:audit','documents.view','notifications.view'
 ]);
 
--- Member (self service)
+-- Member (self service). Directory access is intentionally excluded: profile
+-- pages allow the linked member's own record without exposing other members.
 SELECT grant_perms('member', ARRAY[
-  'dashboard.view','members.view','profile.update_own','documents.upload_own','documents.view',
+  'dashboard.view','profile.update_own','documents.upload_own','documents.view',
   'contributions.view','welfare.view','funerals.view','weddings.view','projects.view','payments.pay_own',
   'sacco.view','savings.view','shares.view','loans.view','loans.apply','loan_approvals.view',
   'guarantors.view','guarantors.respond','receipts.view','statements.view','attendance.view',

@@ -206,13 +206,15 @@ export const getNotificationSettings = cache(async () => {
   const s = await getSetting('notifications');
   return {
     channels: {
-      in_system: s.channels?.in_system !== false,
-      sms: Boolean(s.channels?.sms),
-      email: Boolean(s.channels?.email),
-      whatsapp: Boolean(s.channels?.whatsapp),
+      in_system: s.channels?.in_system ?? s.in_system_enabled ?? true,
+      sms: Boolean(s.channels?.sms ?? s.sms_enabled),
+      email: Boolean(s.channels?.email ?? s.email_enabled),
+      whatsapp: Boolean(s.channels?.whatsapp ?? s.whatsapp_enabled),
     },
     sms_provider: String(s.sms_provider ?? 'none'),
     sms_sender_id: String(s.sms_sender_id ?? 'CMA'),
+    sms_username: String(s.sms_username ?? ''),
+    whatsapp_provider: String(s.whatsapp_provider ?? 'meta'),
     email_provider: String(s.email_provider ?? 'none'),
     smtp_from: String(s.smtp_from ?? 'no-reply@cma.or.ke'),
     reminder_days_before_due: Number(s.reminder_days_before_due ?? 3),
